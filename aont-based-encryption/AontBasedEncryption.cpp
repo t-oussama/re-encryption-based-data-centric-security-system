@@ -29,7 +29,8 @@ void printBytes(const char* label, const unsigned char* var, const unsigned int 
 }
 
 class AontBasedEncryption {
-    private:
+    public:// todo: make private
+
         unsigned char* AllOrNothingTransform(unsigned char *ctr, unsigned char *m, unsigned int n) {
             // TODO: make keyGen random
             unsigned char keyGen[] = {'a', 'b', 'c', '3' , '9'};
@@ -155,7 +156,7 @@ class AontBasedEncryption {
 
         // n is the number of bytes
         unsigned char* BitPermutationEncryption(const unsigned char *input, const unsigned int *permutations, unsigned int n) {
-            unsigned char* result = new unsigned char[n*8];
+            unsigned char* result = new unsigned char[n];
             for(unsigned int i = 0; i < n; i++) {
                 const unsigned int blockStart = i*8;
                 for(int j = 0; j < 8; j++) {
@@ -412,5 +413,9 @@ extern "C" {
     }
     unsigned char* AontBasedEncryption_Decrypt(AontBasedEncryption* enc, unsigned char* ctr, unsigned char* prfKey1, unsigned char* prfKey2, unsigned char* prfKey3, unsigned char* cipher, const unsigned int cipherLen, const unsigned char* iv, const unsigned int n) {
         return enc->Decrypt(ctr, prfKey1, prfKey2, prfKey3, cipher, cipherLen, iv, n);
+    }
+    // for testing purposes only
+    unsigned char* AontBasedEncryption_PseudoRandomFunction(AontBasedEncryption* enc, const unsigned char* bytes, const unsigned int size, const unsigned char* keyBytes) {
+        return enc->PseudoRandomFunction(bytes, size, keyBytes);
     }
 }

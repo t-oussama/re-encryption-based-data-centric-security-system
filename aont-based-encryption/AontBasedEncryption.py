@@ -7,6 +7,7 @@ lib = cdll.LoadLibrary('./bin/libAontBasedEncryption.so')
 
 lib.AontBasedEncryption_Encrypt.restype = POINTER(POINTER(c_ubyte))
 lib.AontBasedEncryption_Decrypt.restype = POINTER(c_ubyte)
+lib.AontBasedEncryption_PseudoRandomFunction.restype = POINTER(c_ubyte)
 
 L = 32
 
@@ -24,6 +25,11 @@ class AontBasedEncryption(object):
     def decrypt(self, ctr, prfKey1, prfKey2, prfKey3, cipher, iv, n):
         res = lib.AontBasedEncryption_Decrypt(self.obj, ctr, prfKey1, prfKey2, prfKey3, cipher, len(cipher), iv, n)
         return bytes(res[0:len(cipher)-L])
+
+    # for testing only
+    def aes_enc(self, m, size, keyBytes):
+        res = lib.AontBasedEncryption_PseudoRandomFunction(self.obj, m, size, keyBytes)
+        return bytes(res[0:size])
 
 
 enc = AontBasedEncryption()
@@ -51,8 +57,14 @@ iv, cipher = res
 
 start = time.time()
 msg = enc.decrypt(ctr, prfKey1, prfKey2, prfKey3, cipher, iv, n)
-print('decrypted')
+print('Decrypted')
 print("took: ", time.time() - start)
 
 if msg == message:
     print('Correctly decrypted')
+
+print('-----------------------------------------------')
+start = time.time()
+c = enc.aes_enc(message, DATA_INPUT_SIZE, 'A'*32)
+print('Encrypted (AES)')
+print("took: ", time.time() - start)
