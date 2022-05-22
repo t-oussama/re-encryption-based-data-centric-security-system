@@ -137,14 +137,23 @@ class AontBasedEncryption {
         }
 
         unsigned char* PseudoRandomFunction(const unsigned char* bytes, const unsigned int size, const unsigned char* keyBytes) {
-            // unsigned char* plainTextKey = (unsigned char*)"01234567890123456789012345678901";
-            AES_KEY key;
-            AES_set_encrypt_key(keyBytes, 256, &key);
-            unsigned char* ciphertext = new unsigned char[size];
-            // TODO: don't leave this as a hard coded value
-            char iv[17] = "1234567890123456";
-            AES_cbc_encrypt((unsigned char*)bytes, ciphertext, size, &key, (unsigned char*)iv, AES_ENCRYPT);
-            return ciphertext;
+            // // unsigned char* plainTextKey = (unsigned char*)"01234567890123456789012345678901";
+            // AES_KEY key;
+            // AES_set_encrypt_key(keyBytes, 256, &key);
+            // unsigned char* result = new unsigned char[size];
+            // // TODO: don't leave this as a hard coded value
+            // char iv[17] = "1234567890123456";
+            // AES_cbc_encrypt((unsigned char*)bytes, result, size, &key, (unsigned char*)iv, AES_ENCRYPT);
+            // return result;
+
+            // TODO: only works for simple case of size = SHA256_DIGEST_LENGTH
+            unsigned char* result = new unsigned char[SHA256_DIGEST_LENGTH];
+            SHA256_CTX sha256;
+            SHA256_Init(&sha256);
+            SHA256_Update(&sha256, bytes, size);
+            SHA256_Update(&sha256, keyBytes, PRF_KEY_LEN);
+            SHA256_Final(result, &sha256);
+            return result;
         }
 
         unsigned char* PermutationEncryption(const unsigned char *input, const unsigned int *permutations, unsigned int n) {
@@ -215,15 +224,20 @@ class AontBasedEncryption {
             unsigned char** tmp = new unsigned char*[permutationKeyLen];
 
             unsigned char* x = new unsigned char[L]{0};
+            auto t1 = high_resolution_clock::now();
             for (unsigned int i = 0; i < permutationKeyLen; i++) {
                 permutationKey[i] = i;
                 memcpy(x, &i, sizeof(unsigned int));
                 tmp[i] = this->PseudoRandomFunction(x , L, prfKey);
             }
             delete[] x;
-            
-            quickSort(permutationKey, tmp, 0, permutationKeyLen);
+            auto t2 = high_resolution_clock::now();
+            cout << "       PRF took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
 
+            t1 = high_resolution_clock::now();
+            quickSort(permutationKey, tmp, 0, permutationKeyLen);
+            t2 = high_resolution_clock::now();
+            cout << "       Sorting took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
             // clean up
             for (unsigned int i = 0; i < permutationKeyLen; i++) {
                 delete[] tmp[i];
