@@ -8,6 +8,14 @@
 #include "openssl/sha.h"
 #include "openssl/aes.h"
 
+#include <chrono>
+using std::chrono::high_resolution_clock;
+using std::chrono::duration_cast;
+using std::chrono::duration;
+using std::chrono::milliseconds;
+using std::chrono::nanoseconds;
+#define NANO_TO_MILLI_FACTOR 1000000
+
 #define L 32 // same as prf key length
 
 using namespace std;
@@ -261,22 +269,45 @@ class AontBasedEncryption {
 
         unsigned char** Encrypt(unsigned char* ctr, unsigned char* prfKey1, unsigned char* prfKey2, unsigned char* prfKey3, unsigned char* message, const unsigned int msgLen, const unsigned int n) {
             // Generate permutation keys
+            auto t1 = high_resolution_clock::now();
             auto permKey1 = generatePermutationKey(prfKey1, L*8);
+            auto t2 = high_resolution_clock::now();
+            cout << "Key 1 generation took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            t1 = high_resolution_clock::now();
             auto permKey2 = generatePermutationKey(prfKey2, L*8);
+            t2 = high_resolution_clock::now();
+            cout << "Key 2 generation took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+
+            t1 = high_resolution_clock::now();
             auto permKey3 = generatePermutationKey(prfKey3, n);
+            t2 = high_resolution_clock::now();
+            cout << "Key 3 generation took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
 
             const unsigned int messageLength = n*L;
             unsigned char* iv = new unsigned char [L];
             memcpy(iv, ctr, L);
             unsigned char* cipher = new unsigned char[messageLength+L];
+            t1 = high_resolution_clock::now();
             unsigned char* m1 = AllOrNothingTransform(ctr, message, n);
+            t2 = high_resolution_clock::now();
+            cout << "AONT took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+
+            t1 = high_resolution_clock::now();
             unsigned char* m2 = PermutationEncryption(m1, permKey3, n);
+            t2 = high_resolution_clock::now();
+            cout << "Key3 permutation Enc took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
             delete[] permKey3;
 
+            t1 = high_resolution_clock::now();
             auto encryptedToken = BitPermutationEncryption(m1+messageLength, permKey1, L);
+            t2 = high_resolution_clock::now();
+            cout << "Key1 bit permutation Enc took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
             delete[] m1;
+            
+            t1 = high_resolution_clock::now();
             auto encryptedIv = BitPermutationEncryption(iv, permKey2, L);
-
+            t2 = high_resolution_clock::now();
+            cout << "Key2 bit permutation Enc took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
             for(unsigned int i = 0; i < L; i++) {
                 encryptedToken[i] = encryptedToken[i] ^ encryptedIv[i];
             }
@@ -284,16 +315,41 @@ class AontBasedEncryption {
             memcpy(cipher, encryptedToken, L);
             delete[] encryptedToken;
 
+
+            t1 = high_resolution_clock::now();
+            long long k1 = 0, k2 = 0, xor_t = 0, cpy = 0;
             for (unsigned int i = 0; i < n; i++) {
+                auto t11 = high_resolution_clock::now();
                 auto x = BitPermutationEncryption(m2+i*L, permKey1, L);
+                auto t12 = high_resolution_clock::now();
+                k1 += duration_cast<nanoseconds>(t12 - t11).count();
+
+                t11 = high_resolution_clock::now();
                 auto y = BitPermutationEncryption(cipher+i*L, permKey2, L);
+                t12 = high_resolution_clock::now();
+                k2 += duration_cast<nanoseconds>(t12 - t11).count();
+                
+                t11 = high_resolution_clock::now();
                 for(unsigned int i = 0; i < L; i++) {
                     x[i] = x[i] ^ y[i];
                 }
+                t12 = high_resolution_clock::now();
+                xor_t += duration_cast<nanoseconds>(t12 - t11).count();
                 delete[] y;
+
+                t11 = high_resolution_clock::now();
                 memcpy(cipher+i*L+L, x, L);
+                t12 = high_resolution_clock::now();
+                cpy += duration_cast<nanoseconds>(t12 - t11).count();
                 delete[] x;
             }
+            t2 = high_resolution_clock::now();
+            cout << "Generating final cihper took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            cout << "       k1 " << k1/NANO_TO_MILLI_FACTOR << " (avg: " << (double) k1/(NANO_TO_MILLI_FACTOR*n) << ")" << endl;
+            cout << "       k2 " << k2/NANO_TO_MILLI_FACTOR << " (avg: " << (double) k2/(NANO_TO_MILLI_FACTOR*n) << ")" << endl;
+            cout << "       xor_t " << xor_t/NANO_TO_MILLI_FACTOR << endl;
+            cout << "       cpy " << cpy/NANO_TO_MILLI_FACTOR << endl;
+
             delete[] m2;
             delete[] permKey1;
             delete[] permKey2;
