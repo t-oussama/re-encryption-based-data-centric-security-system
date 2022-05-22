@@ -37,7 +37,7 @@ void printBytes(const char* label, const unsigned char* var, const unsigned int 
 }
 
 class AontBasedEncryption {
-    public:// todo: make private
+    private:
 
         unsigned char* AllOrNothingTransform(unsigned char *ctr, unsigned char *m, unsigned int n) {
             // TODO: make keyGen random
@@ -400,6 +400,17 @@ class AontBasedEncryption {
             delete[] token;
             return message;
         }
+
+        unsigned char* AesCbc(const unsigned char* bytes, const unsigned int size, const unsigned char* keyBytes) {
+            // unsigned char* plainTextKey = (unsigned char*)"01234567890123456789012345678901";
+            AES_KEY key;
+            AES_set_encrypt_key(keyBytes, 256, &key);
+            unsigned char* ciphertext = new unsigned char[size];
+            // TODO: don't leave this as a hard coded value
+            char iv[17] = "1234567890123456";
+            AES_cbc_encrypt((unsigned char*)bytes, ciphertext, size, &key, (unsigned char*)iv, AES_ENCRYPT);
+            return ciphertext;
+        }
 };
 
 // int main(int argc, char *argv[])
@@ -471,7 +482,7 @@ extern "C" {
         return enc->Decrypt(ctr, prfKey1, prfKey2, prfKey3, cipher, cipherLen, iv, n);
     }
     // for testing purposes only
-    unsigned char* AontBasedEncryption_PseudoRandomFunction(AontBasedEncryption* enc, const unsigned char* bytes, const unsigned int size, const unsigned char* keyBytes) {
-        return enc->PseudoRandomFunction(bytes, size, keyBytes);
+    unsigned char* AontBasedEncryption_AesCbc(AontBasedEncryption* enc, const unsigned char* bytes, const unsigned int size, const unsigned char* keyBytes) {
+        return enc->AesCbc(bytes, size, keyBytes);
     }
 }

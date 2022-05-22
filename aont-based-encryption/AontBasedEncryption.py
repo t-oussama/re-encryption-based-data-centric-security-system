@@ -7,7 +7,7 @@ lib = cdll.LoadLibrary('./bin/libAontBasedEncryption.so')
 
 lib.AontBasedEncryption_Encrypt.restype = POINTER(POINTER(c_ubyte))
 lib.AontBasedEncryption_Decrypt.restype = POINTER(c_ubyte)
-lib.AontBasedEncryption_PseudoRandomFunction.restype = POINTER(c_ubyte)
+lib.AontBasedEncryption_AesCbc.restype = POINTER(c_ubyte)
 
 L = 32
 
@@ -28,7 +28,7 @@ class AontBasedEncryption(object):
 
     # for testing only
     def aes_enc(self, m, size, keyBytes):
-        res = lib.AontBasedEncryption_PseudoRandomFunction(self.obj, m, size, keyBytes)
+        res = lib.AontBasedEncryption_AesCbc(self.obj, m, size, keyBytes)
         return bytes(res[0:size])
 
 
