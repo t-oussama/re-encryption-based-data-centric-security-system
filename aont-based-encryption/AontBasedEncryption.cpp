@@ -14,7 +14,7 @@ using std::chrono::duration_cast;
 using std::chrono::duration;
 using std::chrono::milliseconds;
 using std::chrono::nanoseconds;
-#define NANO_TO_MILLI_FACTOR 1000000
+#define MILLI_TO_NANO_FACTOR 1000000
 
 #define L 32 // same as prf key length
 #define PRF_KEY_LEN SHA256_DIGEST_LENGTH
@@ -360,10 +360,10 @@ class AontBasedEncryption {
             }
             t2 = high_resolution_clock::now();
             cout << "Generating final cihper took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
-            cout << "       k1 " << k1/NANO_TO_MILLI_FACTOR << " (avg: " << (double) k1/(NANO_TO_MILLI_FACTOR*n) << ")" << endl;
-            cout << "       k2 " << k2/NANO_TO_MILLI_FACTOR << " (avg: " << (double) k2/(NANO_TO_MILLI_FACTOR*n) << ")" << endl;
-            cout << "       xor_t " << xor_t/NANO_TO_MILLI_FACTOR << endl;
-            cout << "       cpy " << cpy/NANO_TO_MILLI_FACTOR << endl;
+            cout << "       k1 " << k1/MILLI_TO_NANO_FACTOR << " (avg: " << (double) k1/(MILLI_TO_NANO_FACTOR*n) << ")" << endl;
+            cout << "       k2 " << k2/MILLI_TO_NANO_FACTOR << " (avg: " << (double) k2/(MILLI_TO_NANO_FACTOR*n) << ")" << endl;
+            cout << "       xor_t " << xor_t/MILLI_TO_NANO_FACTOR << endl;
+            cout << "       cpy " << cpy/MILLI_TO_NANO_FACTOR << endl;
 
             delete[] m2;
             delete[] permKey1;
