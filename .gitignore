@@ -1,0 +1,15 @@
+.vscode/*
+# Local History for Visual Studio Code
+.history/
+
+# Built Visual Studio Code Extensions
+*.vsix
+
+aont-based-encryption/bin
+aont-based-encryption/libcrypto.so
+aont-based-encryption/libcrypto.so.1.1
+backups
+data
+**/__pycache__
+todo
+requirements.txt
