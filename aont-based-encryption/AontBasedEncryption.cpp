@@ -17,6 +17,7 @@ using std::chrono::nanoseconds;
 #define NANO_TO_MILLI_FACTOR 1000000
 
 #define L 32 // same as prf key length
+#define PRF_KEY_LEN SHA256_DIGEST_LENGTH
 
 using namespace std;
 
@@ -44,7 +45,7 @@ class AontBasedEncryption {
             unsigned char keyGen[] = {'a', 'b', 'c', '3' , '9'};
             const int keyGenLength = 5;
             // Generate the Prf key based on keyGen
-            unsigned char prfKey[SHA256_DIGEST_LENGTH];
+            unsigned char prfKey[PRF_KEY_LEN];
             SHA256(keyGen, keyGenLength, prfKey);
 
             const unsigned int messageLength = n*L;
