@@ -42,29 +42,26 @@ prfKey3 = b'3'*L
 # message = b'ABCD'*(64//4)
 
 # 1GB max !
-DATA_INPUT_SIZE = 10*1024*1024
+DATA_INPUT_SIZE = 1*1024*1024*1024
+# DATA_INPUT_SIZE = 10*1024*1024
 
 fo = open("../data/random_input", "rb+")
 message = fo.read(DATA_INPUT_SIZE)
 fo.close()
 
 n = len(message)//L
-start = time.time()
 res = enc.encrypt(ctr, prfKey1, prfKey2, prfKey3, message, n)
 print("Encrypted")
-print("took: ", (time.time() - start) * 1000)
 iv, cipher = res
 
-start = time.time()
-msg = enc.decrypt(ctr, prfKey1, prfKey2, prfKey3, cipher, iv, n)
-print('Decrypted')
-print("took: ", (time.time() - start) * 1000)
+# msg = enc.decrypt(ctr, prfKey1, prfKey2, prfKey3, cipher, iv, n)
+# print('Decrypted')
 
-if msg == message:
-    print('Correctly decrypted')
+# if msg == message:
+#     print('Correctly decrypted')
+# else:
+#     print('messages do not match')
 
 print('-----------------------------------------------')
-start = time.time()
 c = enc.aes_enc(message, DATA_INPUT_SIZE, 'A'*32)
 print('Encrypted (AES)')
-print("took: ", (time.time() - start) * 1000)
