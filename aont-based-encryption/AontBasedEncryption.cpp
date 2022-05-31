@@ -287,14 +287,21 @@ class AontBasedEncryption {
             unsigned int* permutationKey = new unsigned int[permutationKeyLen];
             unsigned char** tmp = new unsigned char*[permutationKeyLen];
 
-            unsigned char* x = new unsigned char[L]{0};
+            unsigned char* x = new unsigned char[L*permutationKeyLen]{0};
             auto t1 = high_resolution_clock::now();
             long long cost = 0;
             for (unsigned int i = 0; i < permutationKeyLen; i++) {
                 permutationKey[i] = i;
-                memcpy(x, &i, sizeof(unsigned int));
-                tmp[i] = this->PseudoRandomFunction(x , L, prfKey);
+                memcpy(x + i*L, &i, sizeof(unsigned int));
             }
+
+            // TODO: check if this can be further improved and if the current change
+            // causes any security risk
+            auto fullTmp = this->PseudoRandomFunction(x , L*permutationKeyLen, prfKey);
+            for (unsigned int i = 0; i < permutationKeyLen; i++) {
+                tmp[i] = fullTmp + i*L;
+            }
+
             delete[] x;
             auto t2 = high_resolution_clock::now();
             cout << "       PRF took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
@@ -304,9 +311,10 @@ class AontBasedEncryption {
             t2 = high_resolution_clock::now();
             cout << "       Sorting took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
             // clean up
-            for (unsigned int i = 0; i < permutationKeyLen; i++) {
-                delete[] tmp[i];
-            }
+            // for (unsigned int i = 0; i < permutationKeyLen; i++) {
+            //     delete[] tmp[i];
+            // }
+            delete[] fullTmp;
             delete[] tmp;
 
             return permutationKey;
