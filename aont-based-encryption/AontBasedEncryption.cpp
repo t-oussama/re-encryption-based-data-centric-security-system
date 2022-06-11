@@ -220,6 +220,21 @@ class AontBasedEncryption {
             // return result;
         }
 
+        unsigned char* AesCtr(unsigned char* plaintext, unsigned int plaintextLength, unsigned char* key, unsigned char* counter) {
+            EVP_CIPHER_CTX *ctx;
+            ctx = EVP_CIPHER_CTX_new();
+            unsigned char* cipher = new unsigned char[plaintextLength];
+            EVP_EncryptInit_ex(ctx, EVP_aes_256_ctr(), NULL, key, counter);
+            int len, ciphertext_len;
+            EVP_EncryptUpdate(ctx, cipher, &len, plaintext, plaintextLength);
+            ciphertext_len = len;
+            EVP_EncryptFinal_ex(ctx, cipher + len, &len);
+            ciphertext_len += len;
+            /* Clean up */
+            EVP_CIPHER_CTX_free(ctx);
+            return cipher;
+        }
+
         unsigned char* PermutationEncryption(const unsigned char *input, const unsigned int *permutations, unsigned int n) {
             unsigned char* result = new unsigned char[n*L];
             for(unsigned int i = 0; i < n; i++) {
@@ -287,19 +302,22 @@ class AontBasedEncryption {
             unsigned int* permutationKey = new unsigned int[permutationKeyLen];
             unsigned char** tmp = new unsigned char*[permutationKeyLen];
 
-            unsigned char* x = new unsigned char[L*permutationKeyLen]{0};
+            size_t tmpUnitSize = sizeof(unsigned int);
+            unsigned char* x = new unsigned char[tmpUnitSize*permutationKeyLen]{0};
             auto t1 = high_resolution_clock::now();
             long long cost = 0;
             for (unsigned int i = 0; i < permutationKeyLen; i++) {
                 permutationKey[i] = i;
-                memcpy(x + i*L, &i, sizeof(unsigned int));
+                memcpy(x + i*tmpUnitSize, &i, tmpUnitSize);
             }
 
-            // TODO: check if this can be further improved and if the current change
+            // TODO: counte probably shouldn't be a constant
+            unsigned char counter[L+1] = {0};
+            // TODO: check if this can be further improved and if using aes ctr
             // causes any security risk
-            auto fullTmp = this->PseudoRandomFunction(x , L*permutationKeyLen, prfKey);
+            auto fullTmp = AesCtr(x , tmpUnitSize*permutationKeyLen, prfKey, counter);
             for (unsigned int i = 0; i < permutationKeyLen; i++) {
-                tmp[i] = fullTmp + i*L;
+                tmp[i] = fullTmp + i*tmpUnitSize;
             }
 
             delete[] x;
@@ -307,7 +325,7 @@ class AontBasedEncryption {
             cout << "       PRF took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
 
             t1 = high_resolution_clock::now();
-            quickSort(permutationKey, tmp, 0, permutationKeyLen);
+            quickSort(permutationKey, tmp, 0, permutationKeyLen, tmpUnitSize);
             t2 = high_resolution_clock::now();
             cout << "       Sorting took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
             // clean up
@@ -320,21 +338,21 @@ class AontBasedEncryption {
             return permutationKey;
         }
 
-        void quickSort(unsigned int* key, unsigned char** tmp, const int start , const int end) {
+        void quickSort(unsigned int* key, unsigned char** tmp, const int start , const int end, size_t tmpUnitSize) {
             if(start >= end -1) {
                 return;
             }
 
-            unsigned int q = partition(key, tmp, start, end);
-            quickSort(key, tmp, start, q);
-            quickSort(key, tmp, q+1, end);
+            unsigned int q = partition(key, tmp, start, end, tmpUnitSize);
+            quickSort(key, tmp, start, q, tmpUnitSize);
+            quickSort(key, tmp, q+1, end, tmpUnitSize);
         }
 
-        unsigned int partition(unsigned int* key, unsigned char** tmp, const int start , const int end) {
+        unsigned int partition(unsigned int* key, unsigned char** tmp, const int start , const int end, size_t tmpUnitSize) {
             unsigned char* pivot = tmp[end-1];
             unsigned int i = start;
             for (unsigned int j = start; j < end - 1; j++) {
-                if (memcmp(tmp[j], pivot, L) <= 0) { // compare the actual strings not their addresses
+                if (memcmp(tmp[j], pivot, tmpUnitSize) <= 0) {
                     swap(tmp+i, tmp+j);
                     swap(key+i, key+j);
                     i++;
@@ -472,48 +490,11 @@ class AontBasedEncryption {
         }
 };
 
-// int main(int argc, char *argv[])
-// {
-//     AontBasedEncryption enc = AontBasedEncryption();
-//     unsigned char ctr[64] = {'A'};
-//     unsigned char prfKey1[L] = {'1'};
-//     unsigned char prfKey2[L] = {'2'};
-//     unsigned char prfKey3[L] = {'3'};
-//     unsigned char message[64] = {'0'};
-//     unsigned int n = 64/L;
-
-//     cout << "Encrypting" << endl;
-//     auto res = enc.Encrypt(ctr, prfKey1, prfKey2, prfKey3, message, 64, n);
-//     auto iv = res[0];
-//     auto cipher = res[1];
-//     cout << "Decrypting" << endl;
-//     auto msg = enc.Decrypt(ctr, prfKey1, prfKey2, prfKey3, cipher, 64, iv, n);
-//     delete[] res;
-
-//     cout << "msg: ";
-//     for(unsigned int i = 0 ; i < 64; i++) {
-//         cout << msg[i];
-//     }
-//     cout << endl;
-//     delete[] msg;
-
-//     return 0;
-// }
-
 extern "C" {
     AontBasedEncryption* AontBasedEncryption_new(){ return new AontBasedEncryption(); }
     void AontBasedEncryption_Test(AontBasedEncryption* enc) {
         unsigned char keyGen[] = {'a', 'b', 'c', '3' , '9'};
         const int keyGenLength = 5;
-        // Generate the Prf key based on keyGen
-        // unsigned char prfKey1[L];
-        // SHA256(keyGen, keyGenLength, prfKey1);
-        // unsigned char prfKey2[L];
-        // keyGen[0] = 'b';
-        // SHA256(keyGen, keyGenLength, prfKey2);
-        // unsigned char prfKey3[L];
-        // keyGen[0] = 't';
-        // SHA256(keyGen, keyGenLength, prfKey3);
 
         unsigned char prfKey1[L] = {'1'};
         unsigned char prfKey2[L] = {'2'};
