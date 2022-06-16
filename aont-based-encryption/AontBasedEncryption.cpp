@@ -38,8 +38,16 @@ void printBytes(const char* label, const unsigned char* var, const unsigned int 
     cout << endl;
 }
 
+void print(const char* label, unsigned int* var, const unsigned int len) {
+    cout << label << ": ";
+    for (unsigned int i = 0; i < len; i++) {
+        cout << i << " -> " << var[i] << ", ";
+    }
+    cout << endl;
+}
+
 class AontBasedEncryption {
-    private:
+    public:
 
         unsigned char* AllOrNothingTransform(unsigned char *ctr, unsigned char *m, unsigned int n) {
             // TODO: make keyGen random
@@ -283,22 +291,43 @@ class AontBasedEncryption {
             *dst = (*dst & ~(1UL << dstPos)) | (((*src >> srcPos) & 1U) << dstPos);
         }
 
-        unsigned char* FindConversionKey(const unsigned char* permutaionListA, const unsigned char* permutationListB, const unsigned int n) {
-            unsigned char* conversionKey = new unsigned char[n];
-            for(unsigned int i = 0; i < n; i++) {
-                for(unsigned int j = 0; j < n; j++) {
-                    if(permutaionListA[i] == permutationListB[i]) {
-                        conversionKey[j] = i;
-                        break;
-                    }
+        void quickSort(unsigned int* key, unsigned char** tmp, const int start , const int end, size_t tmpUnitSize) {
+            if(start >= end -1) {
+                return;
+            }
+
+            unsigned int q = partition(key, tmp, start, end, tmpUnitSize);
+            quickSort(key, tmp, start, q, tmpUnitSize);
+            quickSort(key, tmp, q+1, end, tmpUnitSize);
+        }
+
+        unsigned int partition(unsigned int* key, unsigned char** tmp, const int start , const int end, size_t tmpUnitSize) {
+            unsigned char* pivot = tmp[end-1];
+            unsigned int i = start;
+            for (unsigned int j = start; j < end - 1; j++) {
+                if (memcmp(tmp[j], pivot, tmpUnitSize) <= 0) {
+                    swap(tmp+i, tmp+j);
+                    swap(key+i, key+j);
+                    i++;
                 }
             }
 
-            return conversionKey;
+            swap(tmp+i, tmp+end-1);
+            swap(key+i, key+end-1);
+            return i;
         }
 
+        template <typename T> void swap(T* a, T* b) {
+            T tmp = *a;
+            *a = *b;
+            *b = tmp;
+        }
+
+    public:
+        AontBasedEncryption() { }
+
         // prfKey is of size L
-        unsigned int* generatePermutationKey(unsigned char* prfKey, const unsigned int permutationKeyLen) {
+        unsigned int* GeneratePermutationKey(unsigned char* prfKey, const unsigned int permutationKeyLen) {
             unsigned int* permutationKey = new unsigned int[permutationKeyLen];
             unsigned char** tmp = new unsigned char*[permutationKeyLen];
 
@@ -338,48 +367,13 @@ class AontBasedEncryption {
             return permutationKey;
         }
 
-        void quickSort(unsigned int* key, unsigned char** tmp, const int start , const int end, size_t tmpUnitSize) {
-            if(start >= end -1) {
-                return;
-            }
-
-            unsigned int q = partition(key, tmp, start, end, tmpUnitSize);
-            quickSort(key, tmp, start, q, tmpUnitSize);
-            quickSort(key, tmp, q+1, end, tmpUnitSize);
-        }
-
-        unsigned int partition(unsigned int* key, unsigned char** tmp, const int start , const int end, size_t tmpUnitSize) {
-            unsigned char* pivot = tmp[end-1];
-            unsigned int i = start;
-            for (unsigned int j = start; j < end - 1; j++) {
-                if (memcmp(tmp[j], pivot, tmpUnitSize) <= 0) {
-                    swap(tmp+i, tmp+j);
-                    swap(key+i, key+j);
-                    i++;
-                }
-            }
-
-            swap(tmp+i, tmp+end-1);
-            swap(key+i, key+end-1);
-            return i;
-        }
-
-        template <typename T> void swap(T* a, T* b) {
-            T tmp = *a;
-            *a = *b;
-            *b = tmp;
-        }
-
-    public:
-        AontBasedEncryption() { }
-
         unsigned char** Encrypt(unsigned char* ctr, unsigned char* prfKey1, unsigned char* prfKey2, unsigned char* prfKey3, unsigned char* message, const unsigned int msgLen, const unsigned int n) {
             auto t = high_resolution_clock::now();
-            auto permKey1 = generatePermutationKey(prfKey1, L*8);
-            auto permKey2 = generatePermutationKey(prfKey2, L*8);
+            auto permKey1 = GeneratePermutationKey(prfKey1, L*8);
+            auto permKey2 = GeneratePermutationKey(prfKey2, L*8);
             
             auto t1 = high_resolution_clock::now();
-            auto permKey3 = generatePermutationKey(prfKey3, n);
+            auto permKey3 = GeneratePermutationKey(prfKey3, n);
             auto t2 = high_resolution_clock::now();
             cout << "Key 3 generation took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
 
@@ -438,8 +432,8 @@ class AontBasedEncryption {
 
         unsigned char* Decrypt(unsigned char* ctr, unsigned char* prfKey1, unsigned char* prfKey2, unsigned char* prfKey3, unsigned char* cipher, const unsigned int cipherLen, const unsigned char* iv, const unsigned int n) {
             // Generate permutation keys
-            auto permKey1 = generatePermutationKey(prfKey1, L*8);
-            auto permKey2 = generatePermutationKey(prfKey2, L*8);
+            auto permKey1 = GeneratePermutationKey(prfKey1, L*8);
+            auto permKey2 = GeneratePermutationKey(prfKey2, L*8);
 
             unsigned char* m2 = new unsigned char[n*L];
             
@@ -466,7 +460,7 @@ class AontBasedEncryption {
             delete[] permKey1;
             delete[] encryptedToken;
 
-            auto permKey3 = generatePermutationKey(prfKey3, n);
+            auto permKey3 = GeneratePermutationKey(prfKey3, n);
             auto m1 = PermutationDecryption(m2, permKey3, n);
             delete[] permKey3;
 
@@ -474,6 +468,80 @@ class AontBasedEncryption {
             delete[] m1;
             delete[] token;
             return message;
+        }
+
+        unsigned int* FindConversionKey(const unsigned int* permutationListA, const unsigned int* permutationListB, const unsigned int n) {
+            unsigned int* conversionKey = new unsigned int[n];
+            unsigned int* inversePermutationListA = new unsigned int[n];
+            unsigned int* inversePermutationListB = new unsigned int[n];
+            for(unsigned int i = 0; i < n; i++) {
+                inversePermutationListA[permutationListA[i]] = i;
+                inversePermutationListB[permutationListB[i]] = i;
+            }
+
+            for(unsigned int i = 0; i < n; i++) {
+                conversionKey[inversePermutationListB[i]] = inversePermutationListA[i];
+            }
+
+            return conversionKey;
+        }
+
+        unsigned char** ReEncrypt(unsigned int* reEncryptionKey1, unsigned int* originalKey2, unsigned int* newKey2, unsigned int* reEncryptionKey3, unsigned char* iv, unsigned char* cipher, unsigned int n) {
+            // unsigned int* originalKey2 = GeneratePermutationKey(originalKey2Generator, L*8);
+            // unsigned int* newKey2 = GeneratePermutationKey(newKey2Generator, L*8);
+            unsigned char* newCipher = new unsigned char[n*L + L];
+            unsigned char* c1 = new unsigned char[n*L + L];
+
+            for (unsigned int i = n; i > 0; i--) {
+                auto y = BitPermutationEncryption(cipher+(i-1)*L, originalKey2, L);
+
+                for(unsigned int j = 0; j < L; j++) {
+                    y[j] = cipher[i*L + j] ^ y[j];
+                }
+
+                auto x = BitPermutationEncryption(y, reEncryptionKey1, L);
+                delete[] y;
+
+                memcpy(c1+i*L, x, L);
+                delete[] x;
+            }
+            auto c2 = PermutationEncryption(c1+L, reEncryptionKey3, n);
+            delete[] c1;
+            // printBytes("c2", c2, n*L);
+            // printBytes("newCipher", newCipher, n*L + L);
+            memcpy(newCipher+L, c2, n*L);
+            delete[] c2;
+            // newCipher[0]
+            auto encIv2 = BitPermutationEncryption(iv, newKey2, L);
+            auto encIv1 = BitPermutationEncryption(iv, originalKey2, L);
+            auto z = new unsigned char[L];
+            for(unsigned int i = 0; i < L; i++) {
+                z[i] = cipher[i] ^ encIv1[i];
+            }
+            auto x = BitPermutationEncryption(z, reEncryptionKey1, L);
+            delete[] z;
+            for(unsigned int i = 0; i < L; i++) {
+                newCipher[i] = x[i] ^ encIv2[i];
+            }
+            delete[] x;
+
+            // TODO: clean this up
+            unsigned char* finalCipher = new unsigned char[n*L + L];
+            for(int i = 1; i < n+1; i++) {
+                auto x = BitPermutationEncryption(newCipher+(i-1)*L, newKey2, L);
+                for(unsigned int j = 0; j < L; j++) {
+                    finalCipher[i*L + j] = newCipher[i*L +j] ^ x[j];
+                }
+            }
+
+            memcpy(finalCipher, cipher, L);
+
+            delete[] newCipher;
+            auto res = new unsigned char*[2];
+            res[0] = iv;
+            res[1] = finalCipher;
+            printBytes("finalCipher", finalCipher, 100);
+            return res;
         }
 
         unsigned char* AesCbc(const unsigned char* bytes, const unsigned int size, const unsigned char* keyBytes) {
@@ -504,16 +572,33 @@ extern "C" {
         unsigned char message[] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
         const unsigned int msgLen = 64;
         const unsigned int n = 2;
-        auto res = enc->Encrypt(ctr, prfKey1, prfKey2, prfKey3, message, msgLen, n);
+        // auto res = enc->Encrypt(ctr, prfKey1, prfKey2, prfKey3, message, msgLen, n);
 
-        auto iv = res[0];
-        auto cipher = res[1];
-        auto plain = enc->Decrypt(ctr, prfKey1, prfKey2, prfKey3, cipher, msgLen + L, iv, n);
+        // auto iv = res[0];
+        // auto cipher = res[1];
+        // auto plain = enc->Decrypt(ctr, prfKey1, prfKey2, prfKey3, cipher, msgLen + L, iv, n);
 
-        for(int i=  0; i < 64; i++) {
-            cout << plain[i];
-        }
+        // for(int i=  0; i < 64; i++) {
+        //     cout << plain[i];
+        // }
+        auto permKey1 = enc->GeneratePermutationKey(prfKey1, L*8);
+        auto permKey2 = enc->GeneratePermutationKey(prfKey2, L*8);
+        auto x = enc->BitPermutationEncryption(message, permKey1, L);
+        auto ck = enc->FindConversionKey(permKey1, permKey2, L*8);
+        auto y = enc->BitPermutationEncryption(x, ck, L);
+        auto z = enc->BitPermutationEncryption(message, permKey2, L);
+        printBytes("x (enc with key1)", x, L);
+        printBytes("y (enc with ck)", y, L);
+        printBytes("z (enc with key2)", z, L);
         cout << endl;
+        cout << "-----------------------------------------------------" << endl;
+        cout << "-----------------------------------------------------" << endl;
+        print("permKey1", permKey1, L*8);
+        cout << "-----------------------------------------------------" << endl;
+        print("permKey2", permKey2, L*8);
+        cout << "-----------------------------------------------------" << endl;
+        print("ck", ck, L*8);
+        cout << "-----------------------------------------------------" << endl;
     }
     unsigned char** AontBasedEncryption_Encrypt(AontBasedEncryption* enc, unsigned char* ctr, unsigned char* prfKey1, unsigned char* prfKey2, unsigned char* prfKey3, unsigned char* message, const unsigned int msgLen, const unsigned int n) {
         return enc->Encrypt(ctr, prfKey1, prfKey2, prfKey3, message, msgLen, n);
@@ -524,5 +609,17 @@ extern "C" {
     // for testing purposes only
     unsigned char* AontBasedEncryption_AesCbc(AontBasedEncryption* enc, const unsigned char* bytes, const unsigned int size, const unsigned char* keyBytes) {
         return enc->AesCbc(bytes, size, keyBytes);
+    }
+
+    unsigned int* AontBasedEncryption_FindConversionKey(AontBasedEncryption* enc, unsigned int* permutationListA, unsigned int* permutationListB, const unsigned int n) {
+        return enc->FindConversionKey(permutationListA, permutationListB, n);
+    }
+
+    unsigned char** AontBasedEncryption_ReEncrypt(AontBasedEncryption* enc, unsigned int* reEncryptionKey1, unsigned int* originalKey2Generator, unsigned int* newKey2Generator, unsigned int* reEncryptionKey3, unsigned char* iv, unsigned char* cipher, unsigned int n) {
+        return enc->ReEncrypt(reEncryptionKey1, originalKey2Generator, newKey2Generator, reEncryptionKey3, iv, cipher, n);
+    }
+
+    unsigned int* AontBasedEncryption_GeneratePermutationKey(AontBasedEncryption* enc, unsigned char* prfKey, const unsigned int permutationKeyLen) {
+        return enc->GeneratePermutationKey(prfKey, permutationKeyLen);
     }
 }
