@@ -404,17 +404,17 @@ class AontBasedEncryption {
             // long long k1 = 0, k2 = 0, xor_t = 0, cpy = 0;
             for (unsigned int i = 0; i < n; i++) {
                 auto x = BitPermutationEncryption(m2+i*L, permKey1, L);
-
                 auto y = BitPermutationEncryption(cipher+i*L, permKey2, L);
 
-                for(unsigned int i = 0; i < L; i++) {
-                    x[i] = x[i] ^ y[i];
+                for(unsigned int j = 0; j < L; j++) {
+                    x[j] = x[j] ^ y[j];
                 }
                 delete[] y;
 
                 memcpy(cipher+i*L+L, x, L);
                 delete[] x;
             }
+            cout << endl;
             t2 = high_resolution_clock::now();
             cout << "Generating final cihper took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
 
@@ -487,60 +487,62 @@ class AontBasedEncryption {
         }
 
         unsigned char** ReEncrypt(unsigned int* reEncryptionKey1, unsigned int* originalKey2, unsigned int* newKey2, unsigned int* reEncryptionKey3, unsigned char* iv, unsigned char* cipher, unsigned int n) {
-            // unsigned int* originalKey2 = GeneratePermutationKey(originalKey2Generator, L*8);
-            // unsigned int* newKey2 = GeneratePermutationKey(newKey2Generator, L*8);
-            unsigned char* newCipher = new unsigned char[n*L + L];
-            unsigned char* c1 = new unsigned char[n*L + L];
-
-            for (unsigned int i = n; i > 0; i--) {
-                auto y = BitPermutationEncryption(cipher+(i-1)*L, originalKey2, L);
-
+            unsigned char* c1 = new unsigned char[n*L];
+            
+            for (unsigned int i = 0; i < n; i++) {
+                auto y = BitPermutationEncryption(cipher+(n-i-1)*L, originalKey2, L);
                 for(unsigned int j = 0; j < L; j++) {
-                    y[j] = cipher[i*L + j] ^ y[j];
+                    y[j] ^= cipher[(n-i)*L+j];
                 }
-
                 auto x = BitPermutationEncryption(y, reEncryptionKey1, L);
                 delete[] y;
-
-                memcpy(c1+i*L, x, L);
+                memcpy(c1+(n-1-i)*L, x, L);
                 delete[] x;
             }
-            auto c2 = PermutationEncryption(c1+L, reEncryptionKey3, n);
+
+            auto c2_tmp = PermutationEncryption(c1, reEncryptionKey3, n);
+
             delete[] c1;
-            // printBytes("c2", c2, n*L);
-            // printBytes("newCipher", newCipher, n*L + L);
-            memcpy(newCipher+L, c2, n*L);
-            delete[] c2;
-            // newCipher[0]
-            auto encIv2 = BitPermutationEncryption(iv, newKey2, L);
-            auto encIv1 = BitPermutationEncryption(iv, originalKey2, L);
-            auto z = new unsigned char[L];
-            for(unsigned int i = 0; i < L; i++) {
-                z[i] = cipher[i] ^ encIv1[i];
-            }
-            auto x = BitPermutationEncryption(z, reEncryptionKey1, L);
-            delete[] z;
-            for(unsigned int i = 0; i < L; i++) {
-                newCipher[i] = x[i] ^ encIv2[i];
-            }
-            delete[] x;
 
-            // TODO: clean this up
-            unsigned char* finalCipher = new unsigned char[n*L + L];
-            for(int i = 1; i < n+1; i++) {
-                auto x = BitPermutationEncryption(newCipher+(i-1)*L, newKey2, L);
+            auto encryptedIv1 = BitPermutationEncryption(iv, originalKey2, L);
+            auto encryptedIv2 = BitPermutationEncryption(iv, newKey2, L);
+            auto encryptedToken = new unsigned char[L];
+            for(unsigned int j = 0; j < L; j++) {
+                encryptedToken[j] = cipher[j] ^ encryptedIv1[j];
+            }
+            delete[] encryptedIv1;
+
+            auto token = BitPermutationEncryption(encryptedToken, reEncryptionKey1, L);
+
+            for(unsigned int j = 0; j < L; j++) {
+                encryptedToken[j] = token[j] ^ encryptedIv2[j];
+            }
+            delete[] encryptedIv2;
+            delete[] token;
+
+            auto c2 = new unsigned char[n*L + L];
+            memcpy(c2+L, c2_tmp, n*L);
+            memcpy(c2, encryptedToken, L);
+            delete[] encryptedToken;
+            delete[] c2_tmp;
+
+            auto finalCipher = new unsigned char[n*L + L];
+            memcpy(finalCipher, c2, L);
+
+            for (unsigned int i = 0; i < n; i++) {
+                auto y = BitPermutationEncryption(finalCipher+i*L, newKey2, L);
+
                 for(unsigned int j = 0; j < L; j++) {
-                    finalCipher[i*L + j] = newCipher[i*L +j] ^ x[j];
+                    y[j] = c2[(i+1)*L+j] ^ y[j];
                 }
+
+                memcpy(finalCipher+(i+1)*L, y, L);
+                delete[] y;
             }
-
-            memcpy(finalCipher, cipher, L);
-
-            delete[] newCipher;
+            memcpy(finalCipher, c2, L);
             auto res = new unsigned char*[2];
             res[0] = iv;
             res[1] = finalCipher;
-            printBytes("finalCipher", finalCipher, 100);
             return res;
         }
 

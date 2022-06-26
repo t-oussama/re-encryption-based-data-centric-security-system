@@ -112,29 +112,25 @@ newKey2 = enc.generate_permutation_key(newPrfKey2, L*8)
 newKey3 = enc.generate_permutation_key(newPrfKey3, n)
 
 print('Creating re-encryption key 1')
-# reEncryptionKey1 = enc.find_conversion_key(key1, newKey1)
-reEncryptionKey1 = enc.find_conversion_key(key1, key1)
+reEncryptionKey1 = enc.find_conversion_key(key1, newKey1)
 print('Creating re-encryption key 3')
 
-# reEncryptionKey3 = enc.find_conversion_key(key3, newKey3)
-reEncryptionKey3 = enc.find_conversion_key(key3, key3)
+reEncryptionKey3 = enc.find_conversion_key(key3, newKey3)
 print('ReEncrypt')
 
-# newIv, newCipher = enc.re_encrypt(reEncryptionKey1, key2, newKey2, reEncryptionKey3, iv, cipher, n)
-newIv, newCipher = enc.re_encrypt(reEncryptionKey1, key2, key2, reEncryptionKey3, iv, cipher, n)
+newIv, newCipher = enc.re_encrypt(reEncryptionKey1, key2, newKey2, reEncryptionKey3, iv, cipher, n)
 print('ReEncrypted')
 
 # # Encrypt with new keys
-# res = enc.encrypt(ctr, newPrfKey1, newPrfKey2, newPrfKey3, message, n)
-# print("Encrypted with new keys")
-# iv2, cipher2 = res
+res = enc.encrypt(ctr, newPrfKey1, newPrfKey2, newPrfKey3, message, n)
+print("Encrypted with new keys")
+iv2, cipher2 = res
 
-# print('cipher is same: ', newCipher == cipher2)
-# print('iv is same: ', iv2 == iv)
-print('cipher is same: ', newCipher == cipher)
+print('cipher is same: ', newCipher == cipher2)
+print('iv is same: ', iv2 == iv)
 
-# msg = enc.decrypt(ctr, newPrfKey1, newPrfKey2, newPrfKey3, newCipher, newIv, n)
-msg = enc.decrypt(ctr, prfKey1, prfKey2, prfKey3, newCipher, iv, n)
+msg = enc.decrypt(ctr, newPrfKey1, newPrfKey2, newPrfKey3, newCipher, iv, n)
+
 print('Decrypted')
 
 if msg == message:
