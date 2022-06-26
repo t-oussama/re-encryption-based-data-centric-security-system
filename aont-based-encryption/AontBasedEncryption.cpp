@@ -526,23 +526,20 @@ class AontBasedEncryption {
             delete[] encryptedToken;
             delete[] c2_tmp;
 
-            auto finalCipher = new unsigned char[n*L + L];
-            memcpy(finalCipher, c2, L);
-
             for (unsigned int i = 0; i < n; i++) {
-                auto y = BitPermutationEncryption(finalCipher+i*L, newKey2, L);
+                auto y = BitPermutationEncryption(c2+i*L, newKey2, L);
 
                 for(unsigned int j = 0; j < L; j++) {
                     y[j] = c2[(i+1)*L+j] ^ y[j];
                 }
 
-                memcpy(finalCipher+(i+1)*L, y, L);
+                memcpy(c2+(i+1)*L, y, L);
                 delete[] y;
             }
-            memcpy(finalCipher, c2, L);
+
             auto res = new unsigned char*[2];
             res[0] = iv;
-            res[1] = finalCipher;
+            res[1] = c2;
             return res;
         }
 
