@@ -1,3 +1,10 @@
+import sys
+import os
+
+from simplejson import dumps
+BASE_DIR = os.path.dirname(__file__)
+sys.path.append(f'{BASE_DIR}../common')
+
 from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
@@ -5,12 +12,10 @@ import time
 import base64
 import requests
 import os
-from common.constants import CHUNK_SIZE, L
-from common.encryption_engine.EncryptionEngine import EncryptionEngine
+from constants import CHUNK_SIZE, L
+from encryption_engine.EncryptionEngine import EncryptionEngine
 
-from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad
-from Crypto.Random import get_random_bytes
+import socket
 
 def getRequestMeta(username, key):
     timestamp = time.time()
@@ -103,124 +108,73 @@ def uploadFile():
     authData = { 'actor': admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
     response = requests.post('http://localhost:5000/files', json = data, headers = authData)
     fileMeta = response.json()['data']
-    print(fileMeta)
     
-    chunksCount = len(fileMeta['chunks'].keys())
+    chunksIds = fileMeta['chunks'].keys()
     print('----------------------------------------------------------------')
-    print('----------------------------------------------------------------')
-    totalSize = 0
     with open(localFilePath, 'rb') as file:
+        start_time = time.time()
         # for each chunk
-        for i in range(0, chunksCount):
+        for chunkId in chunksIds:
             # read CHUNK_SIZE bytes from file
             plaintext = file.read(CHUNK_SIZE)
-            keyPair = encryptionEngine.genKeyPair()
-            ciphertext = encryptionEngine.encrypt(plaintext, keyPair.publicKey)
-            # print(ciphertext)
-            print(len(ciphertext))
-            totalSize += len(ciphertext)
-            print('*******************************************')
-            # return
-    
+            encryptionMeta = encryptionEngine.genEncryptionMeta()
+            encryptionMeta, ciphertext = encryptionEngine.encrypt(plaintext, encryptionMeta)
+            ciphertextHash = SHA256.new(data=ciphertext).digest()
+            authRequest = {
+                'fileId': fileMeta['fileId'],
+                'chunkId': chunkId,
+                'workerNodeId': fileMeta['chunks'][chunkId]['workers'][0], #TODO: for now we assume only one worker is used
+                # 'decryptionKey': base64.b64encode(encryptionMeta.secret).decode(), #Check if this is really needed
+                'ciphertextHash': base64.b64encode(ciphertextHash).decode(),
+                'operation': 'write'
+            }
+            timestamp, signature = getRequestMeta(admin, adminPrivKey)
+            authData = { 'actor': admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
+            response = requests.get('http://localhost:5000/permission-signature', params=authRequest, headers = authData)
+            opSignature = response.json()['signature']
+            # TODO: think about solving Man in the middle attacks
 
-# cmd = -1
+            # TODO: use workerId to identify worker url
+            ciphertextLen = len(ciphertext)
+            meta = { 'authRequest': authRequest, 'signature': opSignature, 'dataLen': ciphertextLen }
+            print('sending chunk')
+            uploadSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            uploadSocket.connect(('localhost', 3000))
+            uploadSocket.send(dumps(meta).encode('utf-8'))
+            
+            # receive server reply
+            response = uploadSocket.recv(1)
 
-# while cmd != '0':
-#     print('**************************************************************')
-#     print('** Commands **')
-#     print('1. Add user')
-#     print('2. Delete user')
-#     print('3. Get worker nodes')
-#     print('4. Upload file')
-#     print('0. Exit\n')
-#     cmd = input('-> ')
-#     if cmd == '1':
-#         addUser()
-#     elif cmd == '2':
-#         deleteUser()
-#     elif cmd == '3':
-#         getWorkerNodes()
-#     elif cmd == '4':
-#         uploadFile()
+            # stream data
+            for i in range(0, ciphertextLen, 2048):
+                uploadSocket.send(ciphertext[i:min(ciphertextLen, i+2048)])
 
-# ee = EncryptionEngine()
-# c = ee.aontEncryption(b'i'*16, [b'a'*16, b'b'*16, b'c'*16])
-# m = ee.aontDecryption(b'i'*16, c)
-# assert(m[0] == b'a'*16)
-# assert(m[1] == b'b'*16)
-# assert(m[2] == b'c'*16)
-# print('[+] aont works as expected')
+            response = uploadSocket.recv(1)
+            if response == b'1':
+                print('Chunk uploaded successfully')
 
-# permutationInput = []
-# for i in range(0, 200):
-#     permutationInput.append(i)
-
-# key = ee.generatePermutationKey(b'a'*16, 200)
-
-# c = ee.permutationEncryption(key, permutationInput)
-# m = ee.permutationDecryption(key, c)
-# for i in range(0, 200):
-#     assert(m[i] == i)
-# print('[+] permutation enc/dec works as expected')
-
-# ctr = b'xyz_'*4
-# m = b'12345678'*16
-# mList = []
-# n = len(m)//L
-# for i in range(0, n):
-#     mList.append(bytes(m[i * L: (i+1) * L]))
-
-# iv, c = ee.encrypt(ctr, b'1234'*4, b'5678'*4, b'9101'*4, mList, n)
-# m = ee.decrypt(ctr, b'1234'*4, b'5678'*4, b'9101'*4, iv, c, n)
-
-# assert(len(mList) == len(m))
-# for i in range(0, len(mList)):
-#     assert(m[i] == mList[i])
-
-## AONT based
-start_time = time.time()
-ee = EncryptionEngine()
-localFilePath = '/home/oussama/Workspace/research/re-encryption/data/random_input'
-with open(localFilePath, 'rb') as file:
-    totalSize = 0
-    ctr = b'xyz_'*4
-
-    fileSize = os.path.getsize(localFilePath)
-    chunksCount = fileSize // CHUNK_SIZE
-
-    # for each chunk
-    for i in range(0, chunksCount):
-        # read CHUNK_SIZE bytes from file
-        plaintext = file.read(CHUNK_SIZE)
-        n = len(plaintext)//L
-        mList = []
-        for i in range(0, n):
-            mList.append(bytes(plaintext[i * L: (i+1) * L]))
-
-        iv, ciphertext = ee.encrypt(ctr, b'1234'*4, b'5678'*4, b'9101'*4, mList, n)
-
-        totalSize += len(ciphertext)
+        print('file created successfully')
         print("--- %s seconds ---" % (time.time() - start_time))
-        print('*******************************************')
 
 
+cmd = -1
 
-## AES
-# start_time = time.time()
-# ee = EncryptionEngine()
-# localFilePath = '/home/oussama/Workspace/research/re-encryption/data/random_input'
-# with open(localFilePath, 'rb') as file:
+while cmd != '0':
+    print('**************************************************************')
+    print('** Commands **')
+    print('1. Add user')
+    print('2. Delete user')
+    print('3. Get worker nodes')
+    print('4. Upload file')
+    print('0. Exit\n')
+    cmd = input('-> ')
+    if cmd == '1':
+        addUser()
+    elif cmd == '2':
+        deleteUser()
+    elif cmd == '3':
+        getWorkerNodes()
+    elif cmd == '4':
+        uploadFile()
 
-#     fileSize = os.path.getsize(localFilePath)
-#     chunksCount = fileSize // CHUNK_SIZE
-
-#     key = get_random_bytes(16)
-#     cipher = AES.new(key, AES.MODE_CBC)
-#     # for each chunk
-#     for i in range(0, chunksCount):
-#         # read CHUNK_SIZE bytes from file
-#         plaintext = file.read(CHUNK_SIZE)
-#         ct_bytes = cipher.encrypt(pad(plaintext, AES.block_size))
-
-#         print("--- %s seconds ---" % (time.time() - start_time))
-#         print('*******************************************')
+ee = EncryptionEngine()

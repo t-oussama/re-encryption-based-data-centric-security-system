@@ -333,7 +333,7 @@ class AontBasedEncryption {
 
             size_t tmpUnitSize = sizeof(unsigned int);
             unsigned char* x = new unsigned char[tmpUnitSize*permutationKeyLen]{0};
-            auto t1 = high_resolution_clock::now();
+            // auto t1 = high_resolution_clock::now();
             long long cost = 0;
             for (unsigned int i = 0; i < permutationKeyLen; i++) {
                 permutationKey[i] = i;
@@ -350,13 +350,13 @@ class AontBasedEncryption {
             }
 
             delete[] x;
-            auto t2 = high_resolution_clock::now();
-            cout << "       PRF took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            // auto t2 = high_resolution_clock::now();
+            // cout << "       PRF took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
 
-            t1 = high_resolution_clock::now();
+            // t1 = high_resolution_clock::now();
             quickSort(permutationKey, tmp, 0, permutationKeyLen, tmpUnitSize);
-            t2 = high_resolution_clock::now();
-            cout << "       Sorting took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            // t2 = high_resolution_clock::now();
+            // cout << "       Sorting took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
             // clean up
             // for (unsigned int i = 0; i < permutationKeyLen; i++) {
             //     delete[] tmp[i];
@@ -368,23 +368,23 @@ class AontBasedEncryption {
         }
 
         unsigned char** Encrypt(unsigned char* ctr, unsigned char* prfKey1, unsigned char* prfKey2, unsigned char* prfKey3, unsigned char* message, const unsigned int msgLen, const unsigned int n) {
-            auto t = high_resolution_clock::now();
+            // auto t = high_resolution_clock::now();
             auto permKey1 = GeneratePermutationKey(prfKey1, L*8);
             auto permKey2 = GeneratePermutationKey(prfKey2, L*8);
             
-            auto t1 = high_resolution_clock::now();
+            // auto t1 = high_resolution_clock::now();
             auto permKey3 = GeneratePermutationKey(prfKey3, n);
-            auto t2 = high_resolution_clock::now();
-            cout << "Key 3 generation took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            // auto t2 = high_resolution_clock::now();
+            // cout << "Key 3 generation took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
 
             const unsigned int messageLength = n*L;
             unsigned char* iv = new unsigned char [L];
             memcpy(iv, ctr, L);
             unsigned char* cipher = new unsigned char[messageLength+L];
-            t1 = high_resolution_clock::now();
+            // t1 = high_resolution_clock::now();
             unsigned char* m1 = AllOrNothingTransform(ctr, message, n);
-            t2 = high_resolution_clock::now();
-            cout << "AONT took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            // t2 = high_resolution_clock::now();
+            // cout << "AONT took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
 
             unsigned char* m2 = PermutationEncryption(m1, permKey3, n);
             delete[] permKey3;
@@ -400,7 +400,7 @@ class AontBasedEncryption {
             memcpy(cipher, encryptedToken, L);
             delete[] encryptedToken;
 
-            t1 = high_resolution_clock::now();
+            // t1 = high_resolution_clock::now();
             // long long k1 = 0, k2 = 0, xor_t = 0, cpy = 0;
             for (unsigned int i = 0; i < n; i++) {
                 auto x = BitPermutationEncryption(m2+i*L, permKey1, L);
@@ -414,9 +414,9 @@ class AontBasedEncryption {
                 memcpy(cipher+i*L+L, x, L);
                 delete[] x;
             }
-            cout << endl;
-            t2 = high_resolution_clock::now();
-            cout << "Generating final cihper took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            // cout << endl;
+            // t2 = high_resolution_clock::now();
+            // cout << "Generating final cihper took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
 
             delete[] m2;
             delete[] permKey1;
@@ -426,7 +426,7 @@ class AontBasedEncryption {
             res[0] = iv;
             res[1] = cipher;
 
-            cout << "TOTAL took: " << duration_cast<milliseconds>(high_resolution_clock::now() - t).count() << endl;
+            // cout << "TOTAL took: " << duration_cast<milliseconds>(high_resolution_clock::now() - t).count() << endl;
             return res;
         }
 
@@ -544,7 +544,7 @@ class AontBasedEncryption {
         }
 
         unsigned char* AesCbc(const unsigned char* bytes, const unsigned int size, const unsigned char* keyBytes) {
-            auto t = high_resolution_clock::now();
+            // auto t = high_resolution_clock::now();
             // unsigned char* plainTextKey = (unsigned char*)"01234567890123456789012345678901";
             AES_KEY key;
             AES_set_encrypt_key(keyBytes, 256, &key);
@@ -552,7 +552,7 @@ class AontBasedEncryption {
             // TODO: don't leave this as a hard coded value
             char iv[17] = "1234567890123456";
             AES_cbc_encrypt((unsigned char*)bytes, ciphertext, size, &key, (unsigned char*)iv, AES_ENCRYPT);
-            cout << "AES TOTAL took: " << duration_cast<milliseconds>(high_resolution_clock::now() - t).count() << endl;
+            // cout << "AES TOTAL took: " << duration_cast<milliseconds>(high_resolution_clock::now() - t).count() << endl;
             return ciphertext;
         }
 };
@@ -586,18 +586,18 @@ extern "C" {
         auto ck = enc->FindConversionKey(permKey1, permKey2, L*8);
         auto y = enc->BitPermutationEncryption(x, ck, L);
         auto z = enc->BitPermutationEncryption(message, permKey2, L);
-        printBytes("x (enc with key1)", x, L);
-        printBytes("y (enc with ck)", y, L);
-        printBytes("z (enc with key2)", z, L);
-        cout << endl;
-        cout << "-----------------------------------------------------" << endl;
-        cout << "-----------------------------------------------------" << endl;
-        print("permKey1", permKey1, L*8);
-        cout << "-----------------------------------------------------" << endl;
-        print("permKey2", permKey2, L*8);
-        cout << "-----------------------------------------------------" << endl;
-        print("ck", ck, L*8);
-        cout << "-----------------------------------------------------" << endl;
+        // printBytes("x (enc with key1)", x, L);
+        // printBytes("y (enc with ck)", y, L);
+        // printBytes("z (enc with key2)", z, L);
+        // cout << endl;
+        // cout << "-----------------------------------------------------" << endl;
+        // cout << "-----------------------------------------------------" << endl;
+        // print("permKey1", permKey1, L*8);
+        // cout << "-----------------------------------------------------" << endl;
+        // print("permKey2", permKey2, L*8);
+        // cout << "-----------------------------------------------------" << endl;
+        // print("ck", ck, L*8);
+        // cout << "-----------------------------------------------------" << endl;
     }
     unsigned char** AontBasedEncryption_Encrypt(AontBasedEncryption* enc, unsigned char* ctr, unsigned char* prfKey1, unsigned char* prfKey2, unsigned char* prfKey3, unsigned char* message, const unsigned int msgLen, const unsigned int n) {
         return enc->Encrypt(ctr, prfKey1, prfKey2, prfKey3, message, msgLen, n);
