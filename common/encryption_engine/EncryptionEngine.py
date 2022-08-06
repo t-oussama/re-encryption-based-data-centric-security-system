@@ -23,6 +23,8 @@ class EncryptionMeta:
         self.secret = secret
         self.ctr = ctr
         self.iv = iv
+        self.newSecret = None
+
 class EncryptionEngine:
     def __init__(self, config = None) -> None:
         self.enc = AontBasedEncryption()
@@ -48,27 +50,54 @@ class EncryptionEngine:
         prfKey1, prfKey2, prfKey3 = self.__generateEncryptionContext__(encryptionMeta.secret)
         return self.enc.decrypt(encryptionMeta.ctr, prfKey1, prfKey2, prfKey3, ciphertext, encryptionMeta.iv)
 
-    def reEncrypt(self, ciphertext, oldSecret, newSecret, iv):
+    # def reEncrypt(self, ciphertext, oldSecret, newSecret, iv):
+    #     prfKey1, prfKey2, prfKey3 = self.__generateEncryptionContext__(oldSecret)
+    #     newPrfKey1, newPrfKey2, newPrfKey3 = self.__generateEncryptionContext__(newSecret)
+    #     key1 = self.enc.generate_permutation_key(prfKey1, L*8)
+    #     key2 = self.enc.generate_permutation_key(prfKey2, L*8)
+    #     key3 = self.enc.generate_permutation_key(prfKey3, len(ciphertext)//L - 1)
+
+    #     newKey1 = self.enc.generate_permutation_key(newPrfKey1, L*8)
+    #     newKey2 = self.enc.generate_permutation_key(newPrfKey2, L*8)
+    #     newKey3 = self.enc.generate_permutation_key(newPrfKey3, len(ciphertext)//L - 1)
+
+    #     reEncryptionKey1 = self.enc.find_conversion_key(key1, newKey1)
+    #     reEncryptionKey3 = self.enc.find_conversion_key(key3, newKey3)
+    #     return self.enc.re_encrypt(reEncryptionKey1, key2, newKey2, reEncryptionKey3, iv, ciphertext)
+
+    def reEncrypt(self, ciphertext, reEncryptionKey, iv):
+        reEncryptionKey1 = reEncryptionKey['reEncryptionKey1']
+        key2 = reEncryptionKey['key2']
+        newKey2 = reEncryptionKey['newKey2']
+        reEncryptionKey3 = reEncryptionKey['reEncryptionKey3']
+        print('len reEncryptionKey1: ', len(reEncryptionKey1))
+        print('len key2: ', len(key2))
+        print('len newKey2: ', len(newKey2))
+        print('len reEncryptionKey3: ', len(reEncryptionKey3))
+        return self.enc.re_encrypt(reEncryptionKey1, key2, newKey2, reEncryptionKey3, iv, ciphertext)
+
+    def getReEncryptionKey(self, oldSecret, newSecret, ciphertextLen):
         prfKey1, prfKey2, prfKey3 = self.__generateEncryptionContext__(oldSecret)
         newPrfKey1, newPrfKey2, newPrfKey3 = self.__generateEncryptionContext__(newSecret)
         key1 = self.enc.generate_permutation_key(prfKey1, L*8)
         key2 = self.enc.generate_permutation_key(prfKey2, L*8)
-        key3 = self.enc.generate_permutation_key(prfKey3, len(ciphertext)//L - 1)
+        key3 = self.enc.generate_permutation_key(prfKey3, ciphertextLen//L - 1)
 
         newKey1 = self.enc.generate_permutation_key(newPrfKey1, L*8)
         newKey2 = self.enc.generate_permutation_key(newPrfKey2, L*8)
-        newKey3 = self.enc.generate_permutation_key(newPrfKey3, len(ciphertext)//L - 1)
+        newKey3 = self.enc.generate_permutation_key(newPrfKey3, ciphertextLen//L - 1)
 
         reEncryptionKey1 = self.enc.find_conversion_key(key1, newKey1)
         reEncryptionKey3 = self.enc.find_conversion_key(key3, newKey3)
-        return self.enc.re_encrypt(reEncryptionKey1, key2, newKey2, reEncryptionKey3, iv, ciphertext)
+        return {'reEncryptionKey1': reEncryptionKey1, 'reEncryptionKey3': reEncryptionKey3, 'key2': key2, 'newKey2': newKey2}
 
 
 if __name__ == '__main__':
     ee = EncryptionEngine()
-    iv, c = ee.encrypt(b'a'*L*4, {'secret': b'0'*L, 'ctr': 'A'*L})
+    meta, c = ee.encrypt(b'a'*L*4, EncryptionMeta( b'0'*L, 'A'*L))
     # msg = ee.decrypt(c, b'0'*L, iv)
     # print(msg)
-    newIv, new_c = ee.reEncrypt(c, b'0'*L, b'1'*L, iv)
-    msg = ee.decrypt(new_c, {'secret': b'1'*L, 'ctr': 'A'*L, 'iv': iv})
+    rk = ee.getReEncryptionKey(b'0'*L, b'1'*L, len(c))
+    newIv, new_c = ee.reEncrypt(c, rk, meta.iv)
+    msg = ee.decrypt(new_c, EncryptionMeta( b'1'*L, 'A'*L, meta.iv))
     print(msg)

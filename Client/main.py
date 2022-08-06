@@ -110,6 +110,8 @@ def uploadFile():
     fileMeta = response.json()['data']
     
     chunksIds = fileMeta['chunks'].keys()
+    # Initially all chunks are encrypted with the same key but with different ivs
+    encryptionMeta = encryptionEngine.genEncryptionMeta()
     print('----------------------------------------------------------------')
     with open(localFilePath, 'rb') as file:
         start_time = time.time()
@@ -117,29 +119,32 @@ def uploadFile():
         for chunkId in chunksIds:
             # read CHUNK_SIZE bytes from file
             plaintext = file.read(CHUNK_SIZE)
-            encryptionMeta = encryptionEngine.genEncryptionMeta()
+            print('CHUNK_SIZE', CHUNK_SIZE)
             encryptionMeta, ciphertext = encryptionEngine.encrypt(plaintext, encryptionMeta)
             ciphertextHash = SHA256.new(data=ciphertext).digest()
+            workersIds = list(map(lambda e: e['id'], fileMeta['chunks'][chunkId]['workers']))
             authRequest = {
                 'fileId': fileMeta['fileId'],
                 'chunkId': chunkId,
-                'workerNodeId': fileMeta['chunks'][chunkId]['workers'][0], #TODO: for now we assume only one worker is used
-                # 'decryptionKey': base64.b64encode(encryptionMeta.secret).decode(), #Check if this is really needed
+                'size': CHUNK_SIZE,
+                'workerNodeIds': workersIds,
+                'encryptionMeta': base64.b64encode(dumps(encryptionMeta.__dict__).encode('utf-8')).decode(),
                 'ciphertextHash': base64.b64encode(ciphertextHash).decode(),
                 'operation': 'write'
             }
             timestamp, signature = getRequestMeta(admin, adminPrivKey)
             authData = { 'actor': admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
-            response = requests.get('http://localhost:5000/permission-signature', params=authRequest, headers = authData)
+            response = requests.post('http://localhost:5000/permission-signature', json = authRequest, headers = authData)
             opSignature = response.json()['signature']
             # TODO: think about solving Man in the middle attacks
 
             # TODO: use workerId to identify worker url
             ciphertextLen = len(ciphertext)
+            del authRequest['encryptionMeta']
             meta = { 'authRequest': authRequest, 'signature': opSignature, 'dataLen': ciphertextLen }
             print('sending chunk')
             uploadSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            uploadSocket.connect(('localhost', 3000))
+            uploadSocket.connect((fileMeta['chunks'][chunkId]['workers'][0]['host'], int(fileMeta['chunks'][chunkId]['workers'][0]['chunkUploadPort'])))
             uploadSocket.send(dumps(meta).encode('utf-8'))
             
             # receive server reply
@@ -152,6 +157,10 @@ def uploadFile():
             response = uploadSocket.recv(1)
             if response == b'1':
                 print('Chunk uploaded successfully')
+
+            # Inform the TA that the chunk was created
+            # TA can later decide if it should be re-encrypted
+            requests.post('http://localhost:5000/chunks/state', json = {'fileId': fileMeta['fileId'], 'chunkId': chunkId, 'state': 'created'}, headers = authData)
 
         print('file created successfully')
         print("--- %s seconds ---" % (time.time() - start_time))

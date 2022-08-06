@@ -1,16 +1,19 @@
 from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
+
+from .WorkerNode import WorkerNode
 from .User import User
 import os
 import time
 import uuid
 from common import constants
-from common.encryption_engine.EncryptionEngine import EncryptionEngine
+from common.encryption_engine.EncryptionEngine import L, EncryptionEngine
 
 USERS_PERMISSIONS_FILE = './authorized_users/users_permissions'
 AUTHORIZED_USERS_KEYS_DIR = './authorized_users/keys'
 TA_KEYS_DIR = './keys'
+CHUNK_STATES = ['created', 'ready', 're-encrypting']
 
 class TrustedAuthority:
     def __init__(self):
@@ -38,6 +41,7 @@ class TrustedAuthority:
             f.close()
 
         self.encryptionEngine = EncryptionEngine()
+        self.workerRoundRobinIndex = -1
 
     def addUser(self, username: str, key: bytes, permission: str):
         if username in self.users.keys():
@@ -78,10 +82,10 @@ class TrustedAuthority:
         # Everyone who has access can at least read
         return True
 
-    def addWorkerNode(self, nodeId, host, port):
+    def addWorkerNode(self, nodeId, host, port, chunkUploadPort):
         if nodeId in self.workerNodes.keys():
             raise Exception(f'Node {nodeId} already exists')
-        self.workerNodes[nodeId] = { 'host': host, 'port': port }
+        self.workerNodes[nodeId] = { 'id': nodeId, 'host': host, 'port': port, 'chunkUploadPort': chunkUploadPort }
 
     def getWorkerNodes(self):
         workerNodesData = []
@@ -89,13 +93,16 @@ class TrustedAuthority:
             workerNodesData.append({'id': nodeId, 'host': self.workerNodes[nodeId]['host'], 'port': self.workerNodes[nodeId]['port'] })
         return workerNodesData
 
-    # def getEncryptionEngineConfig(self):
-    #     return self.encryptionEngine.getSharedConfig()
+    def getReEncryptionKey(self, oldSecret, newSecret, ciphertextLen):
+        return self.encryptionEngine.getReEncryptionKey(oldSecret, newSecret, ciphertextLen)
 
-    # TODO: make this a simple round robin
     def getWorkerNodeForNewFile(self):
-        # for now return the first one for the sake of simplicity
-        return next(iter(self.workerNodes.keys()))
+        if self.workerRoundRobinIndex == len(self.workerNodes.keys()) - 1:
+            self.workerRoundRobinIndex = 0
+        else:
+            self.workerRoundRobinIndex += 1
+        roundRobinWorkerNodeId = list(self.workerNodes.keys())[self.workerRoundRobinIndex]
+        return self.workerNodes[roundRobinWorkerNodeId]
 
     def createFile(self, fileName, fileSize, filePath, readOnlyUsers, readWriteUsers):
         fileId = str(uuid.uuid4())
@@ -128,6 +135,24 @@ class TrustedAuthority:
             'fileId': fileId,
             'chunks': chunks
         }
+
+    def getChunk(self, fileId, chunkId):
+        return self.files[fileId]['chunks'][chunkId]
+
+    def updateChunkState(self, fileId, chunkId, state):
+        if not state in CHUNK_STATES:
+            raise Exception('Unrecognized chunk state')
+
+        chunk = self.files[fileId]['chunks'][chunkId]
+        chunk['state'] = state
+        
+        if state == 'created':
+            newSecret = self.encryptionEngine.genEncryptionMeta().secret
+            chunk['encryptionMeta'].newSecret = newSecret
+            rk = self.encryptionEngine.getReEncryptionKey(chunk['encryptionMeta'].secret, newSecret, chunk['size']+L)
+            workerNode = self.workerNodes[chunk['workerNodeIds'][0]]
+            WorkerNode.reEncrypt(workerNode['host'], workerNode['port'], fileId, chunkId, rk, chunk['encryptionMeta'].iv)
+
 
     def persistState(self):
         ## Cleanup

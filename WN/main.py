@@ -1,5 +1,4 @@
 import base64
-from distutils.command.upload import upload
 import flask
 from flask import request, jsonify
 import sys
@@ -14,6 +13,8 @@ import os
 import socket
 import threading
 
+from common.encryption_engine.EncryptionEngine import EncryptionEngine
+
 TA_IP = 'localhost'
 TA_PORT = 5000
 
@@ -27,7 +28,7 @@ if len(sys.argv) > 1:
 host = 'localhost'
 if len(sys.argv) > 2:
     host = sys.argv[2]
-data = { 'host': host, 'port': port, 'nodeId': str(Id) }
+data = { 'host': host, 'port': port, 'nodeId': str(Id), 'chunkUploadPort': str(chunkUploadPort) }
 response = requests.post('http://' + TA_IP + ':' + str(TA_PORT) + '/worker-nodes', json = data)
 print(response.text)
 
@@ -35,6 +36,9 @@ print(response.text)
 response = requests.get('http://' + TA_IP + ':' + str(TA_PORT) + '/meta')
 taPublicKey = RSA.import_key(base64.b64decode(response.json()['publicKey']))
 uploadThreads = []
+
+
+encryptionEngine = EncryptionEngine()
 
 def handleChunkWrite(conn):
     metaBytes = conn.recv(1024)
@@ -57,12 +61,14 @@ def handleChunkWrite(conn):
 
     # receive data
     msgLen = int(meta['dataLen'])
+    print('msgLen', msgLen)
     bytes_recd = 0
     while bytes_recd < msgLen:
         data = conn.recv(min(msgLen - bytes_recd, 2048))
         file.write(data)
         bytes_recd = bytes_recd + len(data)
     conn.send(b'1')
+    print('wrote: ', bytes_recd)
 
 uploadSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 def chunkUploadListener():
@@ -91,6 +97,26 @@ app.config["DEBUG"] = False
 @app.route('/test', methods=['GET'])
 def test():
     return True
+
+@app.route('/re-encrypt', methods=['POST'])
+def reEncrypt():
+    print('RE-ENCRYPTING')
+    fileId = request.json['fileId']
+    chunkId = request.json['chunkId']
+    iv = request.json['iv']
+    rk = request.json['rk']
+
+    filePath = DATA_STORAGE_DIR + '/' + fileId
+    if not os.path.exists(filePath):
+        os.mkdir(filePath)
+    file = open(filePath + '/' + chunkId, 'rb+')
+    ciphertext = file.read()
+    print('len: ', len(ciphertext))
+    print(len(iv))
+    _, newCiphertext = encryptionEngine.reEncrypt(ciphertext, rk, iv)
+    file.write(newCiphertext)
+    file.close()
+    return jsonify({ 'success': True })
 
 app.run(port=port)
 

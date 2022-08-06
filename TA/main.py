@@ -1,4 +1,7 @@
 import json
+
+from simplejson import loads
+from common.encryption_engine.EncryptionEngine import EncryptionMeta
 from lib.TrustedAuthority import TrustedAuthority
 import base64
 import flask
@@ -11,11 +14,17 @@ app.config["DEBUG"] = True
 
 ta = TrustedAuthority()
 
-def auth(request):
+## Verifies user permissions on an application level:
+#   * R: user can't create new files, but can write to existing ones if owner gives him to associated permission.
+#   * W: user can create new files.
+#   * A: user can make administrative actions (like adding users).
+# Permissions on other files are always determined by their owner, independently from the user's role on the application level
+##
+def auth(request, operation):
     actor = request.headers.get('actor')
     timestamp = float(request.headers.get('timestamp'))
     signature = base64.b64decode(request.headers.get('signature').encode("ascii"))
-    return ta.auth(actor, timestamp, signature, 'A')
+    return ta.auth(actor, timestamp, signature, operation)
 
 @app.route('/meta', methods=['GET'])
 def getPublicKey():
@@ -23,7 +32,7 @@ def getPublicKey():
 
 @app.route('/users', methods=['POST'])
 def addUser():
-    if not auth(request):
+    if not auth(request, 'A'):
         return {'error': 'User is not authorized'}, 403
 
     username = request.json['username']
@@ -40,7 +49,7 @@ def addUser():
 
 @app.route('/users', methods=['DELETE'])
 def deleteUser():
-    if not auth(request):
+    if not auth(request, 'A'):
         return {'error': 'User is not authorized'}, 403
 
     username = request.json['username']
@@ -59,7 +68,8 @@ def addWorkerNode():
         host = request.json['host']
         port = request.json['port']
         nodeId = request.json['nodeId']
-        ta.addWorkerNode(nodeId, host, port)
+        chunkUploadPort = request.json['chunkUploadPort']
+        ta.addWorkerNode(nodeId, host, port, chunkUploadPort)
     except Exception as e:
         print(e)
         return {'error': str(e)}, 400
@@ -68,7 +78,7 @@ def addWorkerNode():
 
 @app.route('/worker-nodes', methods=['GET'])
 def getWorkerNodes():
-    if not auth(request):
+    if not auth(request, 'A'):
         return {'error': 'User is not authorized'}, 403
 
     try:
@@ -81,7 +91,7 @@ def getWorkerNodes():
 
 @app.route('/encryption-engine/config', methods=['GET'])
 def getEncryptionEngineConfig():
-    if not auth(request):
+    if not auth(request, 'A'):
         return {'error': 'User is not authorized'}, 403
 
     try:
@@ -92,34 +102,40 @@ def getEncryptionEngineConfig():
 
     return jsonify({ 'data': config })
 
-@app.route('/permission-signature', methods=['GET'])
+@app.route('/permission-signature', methods=['POST'])
 def getOperationPermissionSignature():
     # TODO: implement this properly
-    fileId = request.args.get('fileId')
-    chunkId = request.args.get('chunkId')
-    workerNodeId = request.args.get('workerNodeId')
-    # decryptionKey = request.args.get('decryptionKey')
-    ciphertextHash = request.args.get('ciphertextHash')
-    operation = request.args.get('operation')
+    fileId = request.json['fileId']
+    chunkId = request.json['chunkId']
+    workerNodeIds = request.json['workerNodeIds']
+    ciphertextHash = request.json['ciphertextHash']
+    operation = request.json['operation']
+    size = request.json['size']
+
+
+    encryptionMeta = loads(base64.b64decode(request.json['encryptionMeta'].encode('utf-8')).decode('utf-8'))
+    chunk = ta.getChunk(fileId, chunkId)
+    chunk['encryptionMeta'] = EncryptionMeta(bytes(encryptionMeta['secret'], 'utf-8'), bytes(encryptionMeta['ctr'], 'utf-8'), bytes(encryptionMeta['iv'], 'utf-8'))
+    chunk['size'] = size
+    chunk['workerNodeIds'] = workerNodeIds
 
     data = {
         'fileId': fileId,
         'chunkId': chunkId,
-        'workerNodeId': workerNodeId,
+        'size': size,
+        'workerNodeIds': workerNodeIds,
         'ciphertextHash': ciphertextHash,
         'operation': operation,
     }
+    print('workerNodeIds', workerNodeIds)
     
     h = SHA256.new(bytes(json.dumps(data), 'utf-8'))
-    print('bytes', bytes(json.dumps(data), 'utf-8'))
-    print('h', h.hexdigest())
     signature = pkcs1_15.new(ta.privKey).sign(h)
-    print('signature', signature)
     return jsonify({'signature': base64.b64encode(signature).decode()})
 
 @app.route('/files', methods=['POST'])
 def createFile():
-    if not auth(request):
+    if not auth(request, 'W'):
         return {'error': 'User is not authorized'}, 403
 
     try:
@@ -134,5 +150,23 @@ def createFile():
         return {'error': str(e)}, 400
 
     return jsonify({ 'data': fileMeta })
+
+
+@app.route('/chunks/state', methods=['POST'])
+def setState():
+    if not auth(request, 'W'):
+        return {'error': 'User is not authorized'}, 403
+
+    try:
+        fileId = request.json['fileId']
+        chunkId = request.json['chunkId']
+        state = request.json['state']
+        ta.updateChunkState(fileId, chunkId, state)
+    except Exception as e:
+        print('ERROR: ',  e)
+        return {'error': str(e)}, 400
+
+    return jsonify({ 'success': True })
+
 
 app.run()
