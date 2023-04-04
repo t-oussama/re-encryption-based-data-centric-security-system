@@ -1,6 +1,10 @@
 from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
+from common.ChunkMeta import ChunkMeta
+
+from common.FileMeta import FileMeta
+from common.Utils import toDict
 
 from .WorkerNode import WorkerNode
 from .User import User
@@ -13,7 +17,7 @@ from common.encryption_engine.EncryptionEngine import L, EncryptionEngine
 USERS_PERMISSIONS_FILE = './authorized_users/users_permissions'
 AUTHORIZED_USERS_KEYS_DIR = './authorized_users/keys'
 TA_KEYS_DIR = './keys'
-CHUNK_STATES = ['created', 'ready', 're-encrypting']
+CHUNK_STATES = ['created', 'read', 'ready', 're-encrypting']
 
 class TrustedAuthority:
     def __init__(self):
@@ -82,15 +86,15 @@ class TrustedAuthority:
         # Everyone who has access can at least read
         return True
 
-    def addWorkerNode(self, nodeId, host, port, chunkUploadPort):
+    def addWorkerNode(self, nodeId, host, port, chunkUploadPort, chunkFetchPort):
         if nodeId in self.workerNodes.keys():
             raise Exception(f'Node {nodeId} already exists')
-        self.workerNodes[nodeId] = { 'id': nodeId, 'host': host, 'port': port, 'chunkUploadPort': chunkUploadPort }
+        self.workerNodes[nodeId] = { 'id': nodeId, 'host': host, 'port': port, 'chunkUploadPort': chunkUploadPort, 'chunkFetchPort': chunkFetchPort }
 
     def getWorkerNodes(self):
         workerNodesData = []
         for nodeId in self.workerNodes.keys():
-            workerNodesData.append({'id': nodeId, 'host': self.workerNodes[nodeId]['host'], 'port': self.workerNodes[nodeId]['port'] })
+            workerNodesData.append({'id': nodeId, 'host': self.workerNodes[nodeId]['host'], 'port': self.workerNodes[nodeId]['port'], 'chunkUploadPort': self.workerNodes[nodeId]['chunkUploadPort'], 'chunkFetchPort': self.workerNodes[nodeId]['chunkFetchPort'] })
         return workerNodesData
 
     def getReEncryptionKey(self, oldSecret, newSecret, ciphertextLen):
@@ -114,45 +118,44 @@ class TrustedAuthority:
         chunks = {}
         for i in range(0, chunksCount):
             chunkId = str(uuid.uuid4())
-            chunks[chunkId] = {
-                'workers': [self.getWorkerNodeForNewFile()]
-            }
+            chunks[chunkId] = ChunkMeta(workerNodeIds=[self.getWorkerNodeForNewFile()])
         # TODO: validate readOnly & readWrite users. They must:
         #  * exist in self.users
         #  * not exist in both lists as the same time
         #  * have system write permission to be in readWrite list
-        self.files[fileId] = {
-            'name': fileName,
-            'path': filePath,
-            'chunks': chunks,
-            'permissions': {
-                'r': readOnlyUsers,
-                'w': readWriteUsers,
-            }
+        permissions = {
+            'r': readOnlyUsers,
+            'w': readWriteUsers,
         }
+        self.files[fileId] = FileMeta(fileName, filePath, chunks, permissions)
 
         return {
             'fileId': fileId,
-            'chunks': chunks
+            'chunks': toDict(chunks, lambda chunk: chunk.toDict())
         }
 
     def getChunk(self, fileId, chunkId):
-        return self.files[fileId]['chunks'][chunkId]
+        return self.files[fileId].chunks[chunkId]
 
     def updateChunkState(self, fileId, chunkId, state):
         if not state in CHUNK_STATES:
             raise Exception('Unrecognized chunk state')
 
-        chunk = self.files[fileId]['chunks'][chunkId]
-        chunk['state'] = state
+        chunk = self.files[fileId].chunks[chunkId]
+        chunk.state = state
         
-        if state == 'created':
+        if state in ['created', 'read']:
             newSecret = self.encryptionEngine.genEncryptionMeta().secret
-            chunk['encryptionMeta'].newSecret = newSecret
-            rk = self.encryptionEngine.getReEncryptionKey(chunk['encryptionMeta'].secret, newSecret, chunk['size']+L)
-            workerNode = self.workerNodes[chunk['workerNodeIds'][0]]
-            WorkerNode.reEncrypt(workerNode['host'], workerNode['port'], fileId, chunkId, rk, chunk['encryptionMeta'].iv)
+            chunk.encryptionMeta.newSecret = newSecret
+            rk = self.encryptionEngine.getReEncryptionKey(chunk.encryptionMeta.secret, newSecret, chunk.size+L)
+            workerNode = self.workerNodes[chunk.workerNodeIds[0]]
+            WorkerNode.reEncrypt(workerNode['host'], workerNode['port'], fileId, chunkId, rk, chunk.encryptionMeta.iv)
 
+    def getFilesMetaData(self):
+        return list(map(lambda key: { 'id': key, 'name': self.files[key].name, 'path': self.files[key].path }, self.files.keys()))
+
+    def getFile(self, id):
+        return self.files[id]
 
     def persistState(self):
         ## Cleanup

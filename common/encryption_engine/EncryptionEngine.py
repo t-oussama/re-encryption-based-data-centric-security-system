@@ -1,6 +1,8 @@
 import secrets
 import sys
 import os
+
+from simplejson import dumps
 BASE_DIR = os.path.dirname(__file__)
 sys.path.append(f'{BASE_DIR}/../../aont_based_encryption')
 
@@ -24,6 +26,9 @@ class EncryptionMeta:
         self.ctr = ctr
         self.iv = iv
         self.newSecret = None
+
+    def toDict(self):
+        return self.__dict__
 
 class EncryptionEngine:
     def __init__(self, config = None) -> None:

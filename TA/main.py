@@ -21,14 +21,14 @@ ta = TrustedAuthority()
 # Permissions on other files are always determined by their owner, independently from the user's role on the application level
 ##
 def auth(request, operation):
-    actor = request.headers.get('actor')
+    request.user = request.headers.get('actor')
     timestamp = float(request.headers.get('timestamp'))
     signature = base64.b64decode(request.headers.get('signature').encode("ascii"))
-    return ta.auth(actor, timestamp, signature, operation)
+    return ta.auth(request.user, timestamp, signature, operation)
 
 @app.route('/meta', methods=['GET'])
 def getPublicKey():
-    return jsonify({'publicKey': base64.b64encode(ta.pubKey.export_key())})
+    return jsonify({'publicKey': base64.b64encode(ta.pubKey.export_key()).decode('utf-8')})
 
 @app.route('/users', methods=['POST'])
 def addUser():
@@ -69,7 +69,8 @@ def addWorkerNode():
         port = request.json['port']
         nodeId = request.json['nodeId']
         chunkUploadPort = request.json['chunkUploadPort']
-        ta.addWorkerNode(nodeId, host, port, chunkUploadPort)
+        chunkFetchPort = request.json['chunkFetchPort']
+        ta.addWorkerNode(nodeId, host, port, chunkUploadPort, chunkFetchPort)
     except Exception as e:
         print(e)
         return {'error': str(e)}, 400
@@ -115,9 +116,9 @@ def getOperationPermissionSignature():
 
     encryptionMeta = loads(base64.b64decode(request.json['encryptionMeta'].encode('utf-8')).decode('utf-8'))
     chunk = ta.getChunk(fileId, chunkId)
-    chunk['encryptionMeta'] = EncryptionMeta(bytes(encryptionMeta['secret'], 'utf-8'), bytes(encryptionMeta['ctr'], 'utf-8'), bytes(encryptionMeta['iv'], 'utf-8'))
-    chunk['size'] = size
-    chunk['workerNodeIds'] = workerNodeIds
+    chunk.encryptionMeta = EncryptionMeta(bytes(encryptionMeta['secret'], 'utf-8'), bytes(encryptionMeta['ctr'], 'utf-8'), bytes(encryptionMeta['iv'], 'utf-8'))
+    chunk.size = size
+    chunk.workerNodeIds = workerNodeIds
 
     data = {
         'fileId': fileId,
@@ -127,7 +128,6 @@ def getOperationPermissionSignature():
         'ciphertextHash': ciphertextHash,
         'operation': operation,
     }
-    print('workerNodeIds', workerNodeIds)
     
     h = SHA256.new(bytes(json.dumps(data), 'utf-8'))
     signature = pkcs1_15.new(ta.privKey).sign(h)
@@ -150,6 +150,47 @@ def createFile():
         return {'error': str(e)}, 400
 
     return jsonify({ 'data': fileMeta })
+
+@app.route('/files', methods=['GET'])
+def getFiles():
+    if not auth(request, 'R'):
+        return {'error': 'User is not authorized'}, 403
+
+    try:
+        filesMeta = ta.getFilesMetaData()
+    except Exception as e:
+        print(e)
+        return {'error': str(e)}, 400
+
+    return jsonify({ 'data': filesMeta })
+
+@app.route('/files/<fileId>', methods=['GET'])
+def getFile(fileId):
+    if not auth(request, 'R'):
+        return {'error': 'User is not authorized'}, 403
+
+    try:
+        data = ta.getFile(fileId)
+        usersWithAccess = data.permissions['r'] + data.permissions['w']
+        if not request.user in usersWithAccess:
+            return {'error': 'You do not have permission to read this file'}, 403
+
+    except Exception as e:
+        print(e)
+        return {'error': str(e)}, 400
+
+    h = SHA256.new(bytes(json.dumps({'fileId': fileId}), 'utf-8'))
+    signature = pkcs1_15.new(ta.privKey).sign(h)
+    # map data chunks from bytes to strings
+    for chunkId in data.chunks.keys():
+        data.chunks[chunkId].encryptionMeta.secret = data.chunks[chunkId].encryptionMeta.secret.decode()
+        data.chunks[chunkId].encryptionMeta.ctr = data.chunks[chunkId].encryptionMeta.ctr.decode()
+        data.chunks[chunkId].encryptionMeta.iv = data.chunks[chunkId].encryptionMeta.iv.decode()
+        if data.chunks[chunkId].encryptionMeta.newSecret:
+            data.chunks[chunkId].encryptionMeta.newSecret = data.chunks[chunkId].encryptionMeta.newSecret.decode()
+    print('################################################################################')
+    print({'data': data.toDict(), 'signature': base64.b64encode(signature).decode()})
+    return jsonify({'data': data.toDict(), 'signature': base64.b64encode(signature).decode()})
 
 
 @app.route('/chunks/state', methods=['POST'])

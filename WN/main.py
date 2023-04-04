@@ -15,12 +15,14 @@ import threading
 
 from common.encryption_engine.EncryptionEngine import EncryptionEngine
 
+
 TA_IP = 'localhost'
 TA_PORT = 5000
 
 Id = uuid.uuid4()
 port = 8080
 chunkUploadPort = 3000
+chunkFetchPort = 3001
 DATA_STORAGE_DIR = './data'
 
 if len(sys.argv) > 1:
@@ -28,13 +30,13 @@ if len(sys.argv) > 1:
 host = 'localhost'
 if len(sys.argv) > 2:
     host = sys.argv[2]
-data = { 'host': host, 'port': port, 'nodeId': str(Id), 'chunkUploadPort': str(chunkUploadPort) }
+data = { 'host': host, 'port': port, 'nodeId': str(Id), 'chunkUploadPort': str(chunkUploadPort), 'chunkFetchPort': str(chunkFetchPort) }
 response = requests.post('http://' + TA_IP + ':' + str(TA_PORT) + '/worker-nodes', json = data)
 print(response.text)
 
 # import TA public key
 response = requests.get('http://' + TA_IP + ':' + str(TA_PORT) + '/meta')
-taPublicKey = RSA.import_key(base64.b64decode(response.json()['publicKey']))
+taPublicKey = RSA.import_key(base64.b64decode(bytes(response.json()['publicKey'], 'utf-8')))
 uploadThreads = []
 
 
@@ -61,16 +63,49 @@ def handleChunkWrite(conn):
 
     # receive data
     msgLen = int(meta['dataLen'])
-    print('msgLen', msgLen)
     bytes_recd = 0
     while bytes_recd < msgLen:
         data = conn.recv(min(msgLen - bytes_recd, 2048))
         file.write(data)
         bytes_recd = bytes_recd + len(data)
     conn.send(b'1')
-    print('wrote: ', bytes_recd)
+
+def handleChunkFetch(conn):
+    metaBytes = conn.recv(1024)
+    meta = json.loads(metaBytes)
+    print('meta', meta)
+
+    signature = bytes(base64.b64decode(meta['signature']))
+    authRequestHash = SHA256.new(bytes(json.dumps(meta['authRequest']), 'utf-8'))
+
+    # TODO: error handling can be added for when signatures don't match
+    pkcs1_15.new(taPublicKey).verify(authRequestHash, signature)
+    
+    # prepare output file
+    filePath = DATA_STORAGE_DIR + '/' + meta['authRequest']['fileId']
+    if not os.path.exists(filePath):
+        os.mkdir(filePath)
+
+    chunkPath = filePath + '/' + meta['chunkId']
+    file = open(chunkPath, 'rb')
+
+    # receive data
+    dataLen = os.path.getsize(chunkPath) # TODO: this is a temporary fix for files with double size !!
+    print('msgLen', dataLen)
+    bytes_sent = 0
+    while bytes_sent < dataLen:
+        sentLen = min(dataLen - bytes_sent, 2048)
+        data = file.read(sentLen)
+        conn.send(data)
+        bytes_sent = bytes_sent + sentLen
+    conn.recv(1)
+    
+    # Inform TA that read is over
+
 
 uploadSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+downloadSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
 def chunkUploadListener():
     try:
         uploadSocket.bind((host, chunkUploadPort))
@@ -88,8 +123,28 @@ def chunkUploadListener():
     finally:
         uploadSocket.close()
 
+def chunkFetchListener():
+    try:
+        downloadSocket.bind((host, chunkFetchPort))
+        downloadSocket.listen()
+        while True:
+            conn, addr = downloadSocket.accept()
+            print('connection created: ', addr)
+            thread = threading.Thread(target=handleChunkFetch, args=(conn,))
+            uploadThreads.append(thread)
+            thread.start()
+
+    except Exception as e:
+        print(e)
+        exit(1)
+    finally:
+        downloadSocket.close()
+
 chunkUploadListenerThread = threading.Thread(target=chunkUploadListener)
 chunkUploadListenerThread.start()
+
+chunkFetchListenerThread = threading.Thread(target=chunkFetchListener)
+chunkFetchListenerThread.start()
 
 app = flask.Flask(__name__)
 app.config["DEBUG"] = False
@@ -111,8 +166,6 @@ def reEncrypt():
         os.mkdir(filePath)
     file = open(filePath + '/' + chunkId, 'rb+')
     ciphertext = file.read()
-    print('len: ', len(ciphertext))
-    print(len(iv))
     _, newCiphertext = encryptionEngine.reEncrypt(ciphertext, rk, iv)
     file.write(newCiphertext)
     file.close()
@@ -124,3 +177,4 @@ for uploadThread in uploadThreads:
     uploadThread.join()
 
 uploadSocket.close()
+downloadSocket.close()

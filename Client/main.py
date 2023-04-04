@@ -2,6 +2,8 @@ import sys
 import os
 
 from simplejson import dumps
+from yaml import dump
+
 BASE_DIR = os.path.dirname(__file__)
 sys.path.append(f'{BASE_DIR}../common')
 
@@ -12,8 +14,9 @@ import time
 import base64
 import requests
 import os
-from constants import CHUNK_SIZE, L
-from encryption_engine.EncryptionEngine import EncryptionEngine
+from common.constants import CHUNK_SIZE, L
+from common.encryption_engine.EncryptionEngine import EncryptionEngine
+from common.encryption_engine.EncryptionEngine import EncryptionMeta
 
 import socket
 
@@ -70,7 +73,8 @@ def getWorkerNodes():
     timestamp, signature = getRequestMeta(admin, adminPrivKey)
     authData = { 'actor': admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
     response = requests.get('http://localhost:5000/worker-nodes', headers = authData)
-    print(response.text)
+    # print(response.text)
+    return response.json()['data']
 
 
 def uploadFile():
@@ -90,7 +94,8 @@ def uploadFile():
     usersWithReadWrite = list(map(lambda e: e.strip(), usersWithReadWrite.split(',')))
 
 
-    fileSize = os.path.getsize(localFilePath)
+    # fileSize = os.path.getsize(localFilePath)
+    fileSize = CHUNK_SIZE * 5
 
     data = {
         'file': {
@@ -121,8 +126,9 @@ def uploadFile():
             plaintext = file.read(CHUNK_SIZE)
             print('CHUNK_SIZE', CHUNK_SIZE)
             encryptionMeta, ciphertext = encryptionEngine.encrypt(plaintext, encryptionMeta)
+            print('len(ciphertext): ', len(ciphertext))
             ciphertextHash = SHA256.new(data=ciphertext).digest()
-            workersIds = list(map(lambda e: e['id'], fileMeta['chunks'][chunkId]['workers']))
+            workersIds = list(map(lambda e: e['id'], fileMeta['chunks'][chunkId]['workerNodeIds']))
             authRequest = {
                 'fileId': fileMeta['fileId'],
                 'chunkId': chunkId,
@@ -144,7 +150,7 @@ def uploadFile():
             meta = { 'authRequest': authRequest, 'signature': opSignature, 'dataLen': ciphertextLen }
             print('sending chunk')
             uploadSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            uploadSocket.connect((fileMeta['chunks'][chunkId]['workers'][0]['host'], int(fileMeta['chunks'][chunkId]['workers'][0]['chunkUploadPort'])))
+            uploadSocket.connect((fileMeta['chunks'][chunkId]['workerNodeIds'][0]['host'], int(fileMeta['chunks'][chunkId]['workerNodeIds'][0]['chunkUploadPort'])))
             uploadSocket.send(dumps(meta).encode('utf-8'))
             
             # receive server reply
@@ -166,7 +172,59 @@ def uploadFile():
         print("--- %s seconds ---" % (time.time() - start_time))
 
 
+def listFiles():
+    timestamp, signature = getRequestMeta(admin, adminPrivKey)
+    authData = { 'actor': admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
+    response = requests.get('http://localhost:5000/files', headers = authData)
+    filesMeta = response.json()
+    for fileMeta in filesMeta['data']:
+        print(f"* {fileMeta['path']}{fileMeta['name']}  ({fileMeta['id']})")
+
+
+def readFile():
+    fileId = input('File id: ')
+    timestamp, signature = getRequestMeta(admin, adminPrivKey)
+    authData = { 'actor': admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
+    response = requests.get(f'http://localhost:5000/files/{fileId}', headers = authData)
+    responseObject = response.json()
+    opSignature = responseObject['signature']
+    fileMeta = responseObject['data']
+    print(fileMeta)
+    workerNodes = getWorkerNodes()
+    outputFile = open('output.txt', 'wb')
+    for chunkId in fileMeta['chunks'].keys():
+        uploadSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        print('chunkId', chunkId)
+        workerNodeId = fileMeta['chunks'][chunkId]['workerNodeIds'][0]
+        workerNode = list(filter(lambda element: element['id'] == workerNodeId, workerNodes))[0]
+        uploadSocket.connect((workerNode['host'], int(workerNode['chunkFetchPort'])))
+        uploadSocket.send(dumps({'authRequest': {'fileId': fileId}, 'signature': opSignature, 'chunkId': chunkId}).encode('utf-8'))
+        bytes_received = 0
+        data = b''
+        while bytes_received < CHUNK_SIZE+32:
+            sentLen = min(CHUNK_SIZE+32 - bytes_received, 2048)
+            data += uploadSocket.recv(sentLen)
+            bytes_received = bytes_received + sentLen
+        # receive server reply
+        uploadSocket.send(b'1')
+
+        # Inform the TA that the chunk was read
+        # TA can later decide if it should be re-encrypted
+        requests.post('http://localhost:5000/chunks/state', json = {'fileId': fileId, 'chunkId': chunkId, 'state': 'read'}, headers = authData)
+
+        ctr = bytes(fileMeta['chunks'][chunkId]['encryptionMeta']['ctr'], 'utf-8')
+        iv = bytes(fileMeta['chunks'][chunkId]['encryptionMeta']['iv'], 'utf-8')
+        secret = bytes(fileMeta['chunks'][chunkId]['encryptionMeta']['secret'], 'utf-8')
+        encryptionMeta = EncryptionMeta(secret, ctr, iv)
+        plain = encryptionEngine.decrypt(data, encryptionMeta)
+        outputFile.write(plain)
+    outputFile.close()
+
 cmd = -1
+
+            # chunk size:      1048576
+            # ciphertext len:  1048608
+            # chunk file size: 2097216
 
 while cmd != '0':
     print('**************************************************************')
@@ -175,6 +233,8 @@ while cmd != '0':
     print('2. Delete user')
     print('3. Get worker nodes')
     print('4. Upload file')
+    print('5. List files')
+    print('6. Read File')
     print('0. Exit\n')
     cmd = input('-> ')
     if cmd == '1':
@@ -185,5 +245,9 @@ while cmd != '0':
         getWorkerNodes()
     elif cmd == '4':
         uploadFile()
+    elif cmd == '5':
+        listFiles()
+    elif cmd == '6':
+        readFile()
 
 ee = EncryptionEngine()
