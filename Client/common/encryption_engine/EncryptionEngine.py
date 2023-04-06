@@ -1,10 +1,11 @@
 import secrets
+import string
 import sys
 import os
 
 from simplejson import dumps
 BASE_DIR = os.path.dirname(__file__)
-sys.path.append(f'{BASE_DIR}/../../../aont_based_encryption')
+sys.path.append(f'{BASE_DIR}/../../aont_based_encryption')
 
 from Crypto.Hash import SHA256
 from AontBasedEncryption import AontBasedEncryption
@@ -41,8 +42,8 @@ class EncryptionEngine:
         return prfKey1, prfKey2, prfKey3
 
     def genEncryptionMeta(self):
-        secret = b'0'*L
-        ctr = b'A'*L
+        secret = ''.join(secrets.choice(string.ascii_letters + string.digits) for i in range(L))
+        ctr = ''.join(secrets.choice(string.ascii_letters + string.digits) for i in range(L))
         return EncryptionMeta(secret, ctr)
 
     def encrypt(self, message, encryptionMeta):
