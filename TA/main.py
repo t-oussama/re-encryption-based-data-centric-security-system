@@ -8,11 +8,19 @@ import flask
 from flask import request, jsonify
 from Crypto.Hash import SHA256
 from Crypto.Signature import pkcs1_15
+import copy
+import yaml
+
+with open('config.yaml', 'r') as file:
+    try:
+        config = yaml.safe_load(file)
+    except yaml.YAMLError as e:
+        print(e)
 
 app = flask.Flask(__name__)
-app.config["DEBUG"] = True
+app.config['DEBUG'] = config['http']['debug']
 
-ta = TrustedAuthority()
+ta = TrustedAuthority(config['re_encryption'])
 
 ## Verifies user permissions on an application level:
 #   * R: user can't create new files, but can write to existing ones if owner gives him to associated permission.
@@ -23,7 +31,7 @@ ta = TrustedAuthority()
 def auth(request, operation):
     request.user = request.headers.get('actor')
     timestamp = float(request.headers.get('timestamp'))
-    signature = base64.b64decode(request.headers.get('signature').encode("ascii"))
+    signature = base64.b64decode(request.headers.get('signature').encode('ascii'))
     return ta.auth(request.user, timestamp, signature, operation)
 
 @app.route('/meta', methods=['GET'])
@@ -36,7 +44,7 @@ def addUser():
         return {'error': 'User is not authorized'}, 403
 
     username = request.json['username']
-    publickey = base64.b64decode(request.json['key'].encode("ascii"))
+    publickey = base64.b64decode(request.json['key'].encode('ascii'))
     permission = request.json['permission']
 
     try:
@@ -47,15 +55,13 @@ def addUser():
 
     return jsonify(request.json), 201
 
-@app.route('/users', methods=['DELETE'])
-def deleteUser():
+@app.route('/users/<userId>', methods=['DELETE'])
+def deleteUser(userId):
     if not auth(request, 'A'):
         return {'error': 'User is not authorized'}, 403
 
-    username = request.json['username']
-
     try:
-        ta.delUser(username)
+        ta.delUser(userId)
     except Exception as e:
         print(e)
         return {'error': str(e)}, 400
@@ -170,11 +176,10 @@ def getFile(fileId):
         return {'error': 'User is not authorized'}, 403
 
     try:
-        data = ta.getFile(fileId)
+        data = copy.deepcopy(ta.getFile(fileId))
         usersWithAccess = data.permissions['r'] + data.permissions['w']
         if not request.user in usersWithAccess:
             return {'error': 'You do not have permission to read this file'}, 403
-
     except Exception as e:
         print(e)
         return {'error': str(e)}, 400
@@ -186,10 +191,7 @@ def getFile(fileId):
         data.chunks[chunkId].encryptionMeta.secret = data.chunks[chunkId].encryptionMeta.secret.decode()
         data.chunks[chunkId].encryptionMeta.ctr = data.chunks[chunkId].encryptionMeta.ctr.decode()
         data.chunks[chunkId].encryptionMeta.iv = data.chunks[chunkId].encryptionMeta.iv.decode()
-        if data.chunks[chunkId].encryptionMeta.newSecret:
-            data.chunks[chunkId].encryptionMeta.newSecret = data.chunks[chunkId].encryptionMeta.newSecret.decode()
-    print('################################################################################')
-    print({'data': data.toDict(), 'signature': base64.b64encode(signature).decode()})
+    
     return jsonify({'data': data.toDict(), 'signature': base64.b64encode(signature).decode()})
 
 
@@ -202,12 +204,33 @@ def setState():
         fileId = request.json['fileId']
         chunkId = request.json['chunkId']
         state = request.json['state']
-        ta.updateChunkState(fileId, chunkId, state)
+        reEncrypted = ta.updateChunkState(fileId, chunkId, state)
+        if reEncrypted:
+            print('[+] Chunk reEncrypted')
     except Exception as e:
-        print('ERROR: ',  e)
+        print(e)
         return {'error': str(e)}, 400
 
     return jsonify({ 'success': True })
 
+@app.route('/files/<fileId>/access/<userId>', methods=['DELETE'])
+def revokeUserAccess(fileId, userId):
+    if not auth(request, 'W'):
+        return {'error': 'User is not authorized'}, 403
 
-app.run()
+    try:
+        # check if user making the request can update the file
+        data = copy.deepcopy(ta.getFile(fileId))
+        usersWithAccess = data.permissions['w']
+        if not request.user in usersWithAccess:
+            return {'error': 'You do not have permission to update this file'}, 403
+    except Exception as e:
+        print(e)
+        return {'error': str(e)}, 400
+
+    ta.revokeUserAccess(userId, fileId)
+    
+    return jsonify({ 'success': True })
+
+
+app.run(host=config['http']['host'], port=config['http']['port'])

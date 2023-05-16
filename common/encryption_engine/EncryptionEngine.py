@@ -1,4 +1,5 @@
 import secrets
+import string
 import sys
 import os
 
@@ -41,8 +42,8 @@ class EncryptionEngine:
         return prfKey1, prfKey2, prfKey3
 
     def genEncryptionMeta(self):
-        secret = b'0'*L
-        ctr = b'A'*L
+        secret = b''.join(secrets.choice(string.ascii_letters + string.digits).encode() for i in range(L))
+        ctr = b''.join(secrets.choice(string.ascii_letters + string.digits).encode() for i in range(L))
         return EncryptionMeta(secret, ctr)
 
     def encrypt(self, message, encryptionMeta):
@@ -75,10 +76,6 @@ class EncryptionEngine:
         key2 = reEncryptionKey['key2']
         newKey2 = reEncryptionKey['newKey2']
         reEncryptionKey3 = reEncryptionKey['reEncryptionKey3']
-        print('len reEncryptionKey1: ', len(reEncryptionKey1))
-        print('len key2: ', len(key2))
-        print('len newKey2: ', len(newKey2))
-        print('len reEncryptionKey3: ', len(reEncryptionKey3))
         return self.enc.re_encrypt(reEncryptionKey1, key2, newKey2, reEncryptionKey3, iv, ciphertext)
 
     def getReEncryptionKey(self, oldSecret, newSecret, ciphertextLen):
@@ -97,12 +94,12 @@ class EncryptionEngine:
         return {'reEncryptionKey1': reEncryptionKey1, 'reEncryptionKey3': reEncryptionKey3, 'key2': key2, 'newKey2': newKey2}
 
 
-if __name__ == '__main__':
-    ee = EncryptionEngine()
-    meta, c = ee.encrypt(b'a'*L*4, EncryptionMeta( b'0'*L, 'A'*L))
-    # msg = ee.decrypt(c, b'0'*L, iv)
-    # print(msg)
-    rk = ee.getReEncryptionKey(b'0'*L, b'1'*L, len(c))
-    newIv, new_c = ee.reEncrypt(c, rk, meta.iv)
-    msg = ee.decrypt(new_c, EncryptionMeta( b'1'*L, 'A'*L, meta.iv))
-    print(msg)
+# if __name__ == '__main__':
+#     ee = EncryptionEngine()
+#     meta, c = ee.encrypt(b'a'*L*4, EncryptionMeta( b'0'*L, 'A'*L))
+#     # msg = ee.decrypt(c, b'0'*L, iv)
+#     # print(msg)
+#     rk = ee.getReEncryptionKey(b'0'*L, b'1'*L, len(c))
+#     newIv, new_c = ee.reEncrypt(c, rk, meta.iv)
+#     msg = ee.decrypt(new_c, EncryptionMeta( b'1'*L, 'A'*L, meta.iv))
+#     print(msg)

@@ -20,7 +20,10 @@ TA_KEYS_DIR = './keys'
 CHUNK_STATES = ['created', 'read', 'ready', 're-encrypting']
 
 class TrustedAuthority:
-    def __init__(self):
+    def __init__(self, config):
+        # store re-encryption configs
+        self.config = config
+
         # Load keys
         f = open(f'{TA_KEYS_DIR}/priv.key','r')
         self.privKey = RSA.import_key(f.read())
@@ -118,7 +121,7 @@ class TrustedAuthority:
         chunks = {}
         for i in range(0, chunksCount):
             chunkId = str(uuid.uuid4())
-            chunks[chunkId] = ChunkMeta(workerNodeIds=[self.getWorkerNodeForNewFile()])
+            chunks[chunkId] = ChunkMeta(workerNodeIds=[self.getWorkerNodeForNewFile()], chunkId=chunkId)
         # TODO: validate readOnly & readWrite users. They must:
         #  * exist in self.users
         #  * not exist in both lists as the same time
@@ -129,6 +132,11 @@ class TrustedAuthority:
         }
         self.files[fileId] = FileMeta(fileName, filePath, chunks, permissions)
 
+        # add file to user objects
+        uniqueUsers = list(set(readOnlyUsers + readWriteUsers))
+        for userId in uniqueUsers:
+            self.users[userId].files.append(fileId)
+
         return {
             'fileId': fileId,
             'chunks': toDict(chunks, lambda chunk: chunk.toDict())
@@ -136,6 +144,20 @@ class TrustedAuthority:
 
     def getChunk(self, fileId, chunkId):
         return self.files[fileId].chunks[chunkId]
+    
+    def reEncryptChunk(self, fileId: bytes, chunk: ChunkMeta):
+        newSecret = self.encryptionEngine.genEncryptionMeta().secret
+        chunk.encryptionMeta.newSecret = newSecret # TODO: check why I wanted to store newSecret at first
+        rk = self.encryptionEngine.getReEncryptionKey(chunk.encryptionMeta.secret, newSecret, chunk.size+L)
+        workerNode = self.workerNodes[chunk.workerNodeIds[0]]
+        WorkerNode.reEncrypt(workerNode['host'], workerNode['port'], fileId, chunk.id, rk, chunk.encryptionMeta.iv)
+        chunk.encryptionMeta.secret = newSecret
+        chunk.encryptionMeta.newSecret = None
+
+    def reEncryptFile(self, fileId: bytes):
+        chunks = self.files[fileId].chunks.keys()
+        for chunkId in chunks:
+            self.reEncryptChunk(fileId, self.files[fileId].chunks[chunkId])
 
     def updateChunkState(self, fileId, chunkId, state):
         if not state in CHUNK_STATES:
@@ -144,18 +166,30 @@ class TrustedAuthority:
         chunk = self.files[fileId].chunks[chunkId]
         chunk.state = state
         
-        if state in ['created', 'read']:
-            newSecret = self.encryptionEngine.genEncryptionMeta().secret
-            chunk.encryptionMeta.newSecret = newSecret
-            rk = self.encryptionEngine.getReEncryptionKey(chunk.encryptionMeta.secret, newSecret, chunk.size+L)
-            workerNode = self.workerNodes[chunk.workerNodeIds[0]]
-            WorkerNode.reEncrypt(workerNode['host'], workerNode['port'], fileId, chunkId, rk, chunk.encryptionMeta.iv)
+        if (state == 'read' and self.config['triggers']['read']) or (state == 'created' and self.config['triggers']['write']):
+            self.reEncryptChunk(fileId.encode(), chunk)
+            return True
+        return False
 
     def getFilesMetaData(self):
         return list(map(lambda key: { 'id': key, 'name': self.files[key].name, 'path': self.files[key].path }, self.files.keys()))
 
     def getFile(self, id):
         return self.files[id]
+    
+    def revokeUserAccess(self, userId, fileId):
+        userHadAccess = False
+        if userId in self.files[fileId].permissions['r']:
+            self.files[fileId].permissions['r'].remove(userId)
+            userHadAccess = True
+        if userId in self.files[fileId].permissions['w']:
+            self.files[fileId].permissions['w'].remove(userId)
+            userHadAccess = True
+        
+        if not userHadAccess:
+            return
+
+        self.users[userId].files.remove(fileId)
 
     def persistState(self):
         ## Cleanup
@@ -178,4 +212,3 @@ class TrustedAuthority:
             userKeyFile.close()
 
         usersPermissionsFile.close()
-

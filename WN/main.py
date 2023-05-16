@@ -32,7 +32,6 @@ if len(sys.argv) > 2:
     host = sys.argv[2]
 data = { 'host': host, 'port': port, 'nodeId': str(Id), 'chunkUploadPort': str(chunkUploadPort), 'chunkFetchPort': str(chunkFetchPort) }
 response = requests.post('http://' + TA_IP + ':' + str(TA_PORT) + '/worker-nodes', json = data)
-print(response.text)
 
 # import TA public key
 response = requests.get('http://' + TA_IP + ':' + str(TA_PORT) + '/meta')
@@ -73,8 +72,6 @@ def handleChunkWrite(conn):
 def handleChunkFetch(conn):
     metaBytes = conn.recv(1024)
     meta = json.loads(metaBytes)
-    print('meta', meta)
-
     signature = bytes(base64.b64decode(meta['signature']))
     authRequestHash = SHA256.new(bytes(json.dumps(meta['authRequest']), 'utf-8'))
 
@@ -91,7 +88,6 @@ def handleChunkFetch(conn):
 
     # receive data
     dataLen = os.path.getsize(chunkPath) # TODO: this is a temporary fix for files with double size !!
-    print('msgLen', dataLen)
     bytes_sent = 0
     while bytes_sent < dataLen:
         sentLen = min(dataLen - bytes_sent, 2048)
@@ -99,7 +95,6 @@ def handleChunkFetch(conn):
         conn.send(data)
         bytes_sent = bytes_sent + sentLen
     conn.recv(1)
-    
     # Inform TA that read is over
 
 
@@ -155,10 +150,9 @@ def test():
 
 @app.route('/re-encrypt', methods=['POST'])
 def reEncrypt():
-    print('RE-ENCRYPTING')
     fileId = request.json['fileId']
     chunkId = request.json['chunkId']
-    iv = request.json['iv']
+    iv = request.json['iv'].encode('utf-8')
     rk = request.json['rk']
 
     filePath = DATA_STORAGE_DIR + '/' + fileId
@@ -167,6 +161,7 @@ def reEncrypt():
     file = open(filePath + '/' + chunkId, 'rb+')
     ciphertext = file.read()
     _, newCiphertext = encryptionEngine.reEncrypt(ciphertext, rk, iv)
+    file.seek(0)
     file.write(newCiphertext)
     file.close()
     return jsonify({ 'success': True })
