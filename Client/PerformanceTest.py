@@ -1,11 +1,9 @@
 from Client import Client
-from Logger import Logger
 import os
 import time
 
 def sequence(fileSize):
-    client = Client('user1')
-    logger = Logger(f'performance_test_{fileSize}_{time.time()}')
+    client = Client('user1', f'performance_test_{fileSize}_{time.time()}')
 
     # create new user
     newUserName = 'new_test_user'
@@ -18,29 +16,23 @@ def sequence(fileSize):
     usersWithReadOnly = 'user3'
     usersWithReadWrite = f'user1,user2,{newUserName}'
 
-    print(f'[i] File size {logger.sizeof_fmt(os.path.getsize(localFilePath))}')
-    start_time = time.time()
+
+    print('Uploading file ...')
     fileId = client.uploadFile(localFilePath, remoteDirectory, remoteFilename, usersWithReadOnly, usersWithReadWrite)
-    exec_duration = time.time() - start_time
-    print(f"File Upload --- {exec_duration} seconds ---")
-    logger.logPerformance('file_upload', exec_duration)
+    print('File Uploaded')
 
     # get file
-    start_time = time.time()
+    print('Downloading file ...')
     client.downloadFile(fileId)
-    exec_duration = time.time() - start_time
-    print(f"File Download --- {exec_duration} seconds ---")
-    logger.logPerformance('file_download', exec_duration)
+    print('File Downloaded')
 
     # remove access to new user
-    start_time = time.time()
+    print('Revoking access ...')
     client.revokeUserAccess(newUserName, fileId)
-    exec_duration = time.time() - start_time
-    print(f"Revoking access --- {exec_duration} seconds ---")
-    logger.logPerformance('revoke_access', exec_duration)
+    print('Access revoked')
 
     # compare file to source
-    diff = os.system(f"diff ./{fileId} {localFilePath}")
+    diff = os.system(f'diff ./{fileId} {localFilePath}')
 
     if diff:
         print('[i] Decrypted files do not match !')
@@ -50,8 +42,8 @@ def sequence(fileSize):
         print('[+] Scenario successful')
 
     # print('[*] Cleaning up')
-    # os.system(f"rm ./{fileId}")
-    # os.system(f"rm -r ../WN/data/{fileId}")
+    # os.system(f'rm ./{fileId}')
+    # os.system(f'rm -r ../WN/data/{fileId}')
     print('[+] DONE')
 
 fileSizes = ['1GB', '2GB', '3GB']

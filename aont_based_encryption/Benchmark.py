@@ -1,0 +1,109 @@
+import time
+
+from AontBasedEncryption import AontBasedEncryption, L
+
+enc = AontBasedEncryption()
+
+ctr = b'0' * L
+prfKey1 = b'1'*L
+prfKey2 = b'2'*L
+prfKey3 = b'3'*L
+# # message = b'ABCD'*(64//4)
+
+# Bytes to use
+# DATA_INPUT_SIZE = 1*1024*1024*1024
+DATA_INPUT_SIZE = 512*1024*1024
+
+fo = open("../data/random_text_1GB", "rb+")
+message = fo.read(DATA_INPUT_SIZE)
+fo.close()
+
+execTimes = {}
+
+print('Encrypting')
+start = time.time()
+res = enc.encrypt(ctr, prfKey1, prfKey2, prfKey3, message)
+execTime = time.time() - start
+print('Encrypted')
+print('Execution time', execTime, '\n\n')
+execTimes['enc'] = execTime
+
+iv, cipher = res
+
+print('Decrypting ...')
+start = time.time()
+msg = enc.decrypt(ctr, prfKey1, prfKey2, prfKey3, cipher, iv)
+execTime = time.time() - start
+print('Decrypted')
+print('Execution time', execTime, '\n\n')
+execTimes['dec'] = execTime
+
+if msg == message:
+    print('Correctly decrypted')
+else:
+    print('messages do not match')
+
+# print('-----------------------------------------------')
+# c = enc.aes_enc(message, DATA_INPUT_SIZE, 'A'*32)
+# print('Encrypted (AES)')
+
+
+# Re-encryption
+start = time.time()
+newPrfKey1 = b'4'*L
+newPrfKey2 = b'5'*L
+newPrfKey3 = b'6'*L
+
+print('Creating re-encryption key 1')
+keyStart = time.time()
+key1 = enc.generate_permutation_key(prfKey1, L*8)
+newKey1 = enc.generate_permutation_key(newPrfKey1, L*8)
+reEncryptionKey1 = enc.find_conversion_key(key1, newKey1)
+execTimes['key1Gen'] = time.time() - keyStart
+
+print('Creating re-encryption key 2')
+keyStart = time.time()
+key2 = enc.generate_permutation_key(prfKey2, L*8)
+newKey2 = enc.generate_permutation_key(newPrfKey2, L*8)
+execTimes['key2Gen'] = time.time() - keyStart
+
+print('Creating re-encryption key 3')
+keyStart = time.time()
+key3 = enc.generate_permutation_key(prfKey3, len(message)//L)
+newKey3 = enc.generate_permutation_key(newPrfKey3, len(message)//L)
+reEncryptionKey3 = enc.find_conversion_key(key3, newKey3)
+execTimes['key3Gen'] = time.time() - keyStart
+
+execTime = time.time() - start
+print('Keys generated')
+print('Execution time', execTime, '\n\n')
+execTimes['keyGen'] = execTime
+
+print('ReEncrypting ...')
+start = time.time()
+newIv, newCipher = enc.re_encrypt(reEncryptionKey1, key2, newKey2, reEncryptionKey3, iv, cipher)
+execTime = time.time() - start
+print('ReEncrypted')
+print('Execution time', execTime, '\n\n')
+execTimes['reEnc'] = execTime
+
+# # Verify re-encryption works as expected
+# # Encrypt with new keys
+# res = enc.encrypt(ctr, newPrfKey1, newPrfKey2, newPrfKey3, message)
+# print("Encrypted with new keys")
+# iv2, cipher2 = res
+
+# print('cipher is same: ', newCipher == cipher2)
+# print('iv is same: ', iv2 == iv)
+
+msg = enc.decrypt(ctr, newPrfKey1, newPrfKey2, newPrfKey3, newCipher, iv)
+
+print('Decrypted')
+
+if msg == message:
+    print('Correctly decrypted')
+else:
+    print('messages do not match')
+
+print('-------------------------------------')
+print('Results\n', execTimes)
