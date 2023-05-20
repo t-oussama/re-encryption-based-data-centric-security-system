@@ -12,24 +12,30 @@ from Crypto.PublicKey import RSA
 import os
 import socket
 import threading
+import yaml
 
 from common.encryption_engine.EncryptionEngine import EncryptionEngine
 
+configFile = 'config.yaml'
+if len(sys.argv) > 1:
+    configFile = sys.argv[1]
 
-TA_IP = 'localhost'
-TA_PORT = 5000
+with open(configFile, 'r') as file:
+    try:
+        config = yaml.safe_load(file)
+    except yaml.YAMLError as e:
+        print(e)
+
+TA_IP = config['TA']['host']
+TA_PORT = config['TA']['port']
 
 Id = uuid.uuid4()
-port = 8080
-chunkUploadPort = 3000
-chunkFetchPort = 3001
+port = config['http']['port']
+host = config['http']['host']
+chunkUploadPort = config['socket']['uploadPort']
+chunkFetchPort = config['socket']['downloadPort']
 DATA_STORAGE_DIR = './data'
 
-if len(sys.argv) > 1:
-    port = int(sys.argv[1])
-host = 'localhost'
-if len(sys.argv) > 2:
-    host = sys.argv[2]
 data = { 'host': host, 'port': port, 'nodeId': str(Id), 'chunkUploadPort': str(chunkUploadPort), 'chunkFetchPort': str(chunkFetchPort) }
 response = requests.post('http://' + TA_IP + ':' + str(TA_PORT) + '/worker-nodes', json = data)
 

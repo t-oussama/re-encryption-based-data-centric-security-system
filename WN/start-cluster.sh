@@ -8,6 +8,5 @@ fi
 instances_count=$1
 for ((i = 0; i < $instances_count; i++))
 do
-    port=$((8080 + $i))
-    python3.9 main.py $port &
+    python3.9 main.py ./cluster-configs/node$i &
 done

@@ -1,7 +1,7 @@
 from Client import Client
 import os
 
-client = Client('user1')
+client = Client('user1', 'scenario_1')
 
 # upload 5MB file
 localFilePath = '/home/oussama/Workspace/research/re-encryption/data/random_text'

@@ -6,13 +6,14 @@ from common.ChunkMeta import ChunkMeta
 from common.FileMeta import FileMeta
 from common.Utils import toDict
 
-from .WorkerNode import WorkerNode
+from .Scheduler import Scheduler
 from .User import User
 import os
 import time
 import uuid
+from datetime import datetime
 from common import constants
-from common.encryption_engine.EncryptionEngine import L, EncryptionEngine
+from common.encryption_engine.EncryptionEngine import EncryptionEngine
 
 USERS_PERMISSIONS_FILE = './authorized_users/users_permissions'
 AUTHORIZED_USERS_KEYS_DIR = './authorized_users/keys'
@@ -49,6 +50,8 @@ class TrustedAuthority:
 
         self.encryptionEngine = EncryptionEngine()
         self.workerRoundRobinIndex = -1
+
+        self.scheduler = Scheduler(self.config['scheduling'], self.encryptionEngine, self.workerNodes)
 
     def addUser(self, username: str, key: bytes, permission: str):
         if username in self.users.keys():
@@ -145,19 +148,8 @@ class TrustedAuthority:
     def getChunk(self, fileId, chunkId):
         return self.files[fileId].chunks[chunkId]
     
-    def reEncryptChunk(self, fileId: bytes, chunk: ChunkMeta):
-        newSecret = self.encryptionEngine.genEncryptionMeta().secret
-        chunk.encryptionMeta.newSecret = newSecret # TODO: check why I wanted to store newSecret at first
-        rk = self.encryptionEngine.getReEncryptionKey(chunk.encryptionMeta.secret, newSecret, chunk.size+L)
-        workerNode = self.workerNodes[chunk.workerNodeIds[0]]
-        WorkerNode.reEncrypt(workerNode['host'], workerNode['port'], fileId, chunk.id, rk, chunk.encryptionMeta.iv)
-        chunk.encryptionMeta.secret = newSecret
-        chunk.encryptionMeta.newSecret = None
-
-    def reEncryptFile(self, fileId: bytes):
-        chunks = self.files[fileId].chunks.keys()
-        for chunkId in chunks:
-            self.reEncryptChunk(fileId, self.files[fileId].chunks[chunkId])
+    def _reEncryptChunk(self, fileId: bytes, chunk: ChunkMeta):
+        self.scheduler.scheduleReEncryption(fileId, chunk)
 
     def updateChunkState(self, fileId, chunkId, state):
         if not state in CHUNK_STATES:
@@ -165,9 +157,10 @@ class TrustedAuthority:
 
         chunk = self.files[fileId].chunks[chunkId]
         chunk.state = state
+        chunk.lastAccessTime = datetime.now()
         
         if (state == 'read' and self.config['triggers']['read']) or (state == 'created' and self.config['triggers']['write']):
-            self.reEncryptChunk(fileId.encode(), chunk)
+            self._reEncryptChunk(fileId.encode(), chunk)
             return True
         return False
 

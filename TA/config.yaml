@@ -1,10 +1,12 @@
 http:
   host: '0.0.0.0'
   port: 5000
-  debug: true
+  debug: false
 
 re_encryption:
   triggers:
     read: true
     write: true
-  lazy: false
+  scheduling:
+    lazy: false
+    lastAccessTimeOffset: 300 # In seconds

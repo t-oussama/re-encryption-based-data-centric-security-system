@@ -2,6 +2,7 @@ import sys
 import os
 
 from simplejson import dumps
+from Logger import Logger
 
 BASE_DIR = os.path.dirname(__file__)
 sys.path.append(f'{BASE_DIR}../common')
@@ -20,7 +21,7 @@ from common.encryption_engine.EncryptionEngine import EncryptionMeta
 import socket
 
 class Client:
-    def __init__(self, admin):
+    def __init__(self, admin, logFileName):
         USER_KEYS_DIR = '../user_keys'
         
         self.admin = admin
@@ -37,6 +38,7 @@ class Client:
         # config = response.text
         # print(config)
         self.encryptionEngine = EncryptionEngine()
+        self.logger = Logger(logFileName)
 
     def getRequestMeta(self, username, key):
         timestamp = time.time()
@@ -79,6 +81,8 @@ class Client:
 
 
     def uploadFile(self, localFilePath, remoteDirectory, remoteFilename, usersWithReadOnly, usersWithReadWrite):
+        uploadStartTime = time.time()
+        metaCreationStartTime = time.time()
         usersWithReadOnly = list(map(lambda e: e.strip(), usersWithReadOnly.split(',')))
         usersWithReadWrite = list(map(lambda e: e.strip(), usersWithReadWrite.split(',')))
 
@@ -100,18 +104,37 @@ class Client:
         authData = { 'actor': self.admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
         response = requests.post('http://localhost:5000/files', json = data, headers = authData)
         fileMeta = response.json()['data']
+        metaCreationEndTime = time.time()
         
         chunksIds = fileMeta['chunks'].keys()
         # Initially all chunks are encrypted with the same key but with different ivs
         encryptionMeta = self.encryptionEngine.genEncryptionMeta()
-        print('----------------------------------------------------------------')
+        chunkTimes = {
+            'fileRead': {},
+            'encryption': {},
+            'hash': {},
+            'opSignatureGen': {},
+            'uploadOpSigVerification': {},
+            'upload': {},
+            'taStateUpdate': {},
+        }
         with open(localFilePath, 'rb') as file:
             # for each chunk
             for chunkId in chunksIds:
                 # read CHUNK_SIZE bytes from file
+                chunkTimes['fileRead'][chunkId] = {'start': time.time()}
                 plaintext = file.read(CHUNK_SIZE)
+                chunkTimes['fileRead'][chunkId]['end'] = time.time()
+
+                chunkTimes['encryption'][chunkId] = {'start': time.time()}
                 encryptionMeta, ciphertext = self.encryptionEngine.encrypt(plaintext, encryptionMeta)
+                chunkTimes['encryption'][chunkId]['end'] = time.time()
+                
+                chunkTimes['hash'][chunkId] = {'start': time.time()}
                 ciphertextHash = SHA256.new(data=ciphertext).digest()
+                chunkTimes['hash'][chunkId]['end'] = time.time()
+
+                chunkTimes['opSignatureGen'][chunkId] = {'start': time.time()}
                 workersIds = list(map(lambda e: e['id'], fileMeta['chunks'][chunkId]['workerNodeIds']))
                 authRequest = {
                     'fileId': fileMeta['fileId'],
@@ -126,9 +149,11 @@ class Client:
                 authData = { 'actor': self.admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
                 response = requests.post('http://localhost:5000/permission-signature', json = authRequest, headers = authData)
                 opSignature = response.json()['signature']
+                chunkTimes['opSignatureGen'][chunkId]['end'] = time.time()
                 # TODO: think about solving Man in the middle attacks
 
                 # TODO: use workerId to identify worker url
+                chunkTimes['uploadOpSigVerification'][chunkId] = {'start': time.time()}
                 ciphertextLen = len(ciphertext)
                 del authRequest['encryptionMeta']
                 meta = { 'authRequest': authRequest, 'signature': opSignature, 'dataLen': ciphertextLen }
@@ -136,23 +161,40 @@ class Client:
                 uploadSocket.connect((fileMeta['chunks'][chunkId]['workerNodeIds'][0]['host'], int(fileMeta['chunks'][chunkId]['workerNodeIds'][0]['chunkUploadPort'])))
                 uploadSocket.send(dumps(meta, ensure_ascii=False).encode('utf-8'))
                 
-                # receive server reply
+                # receive server reply about auth check verification
+                # TODO: handle the different cases of WN reply
                 response = uploadSocket.recv(1)
+                chunkTimes['uploadOpSigVerification'][chunkId]['end'] = time.time()
 
                 # stream data
+                chunkTimes['upload'][chunkId] = {'start': time.time()}
                 for i in range(0, ciphertextLen, 2048):
                     uploadSocket.send(ciphertext[i:min(ciphertextLen, i+2048)])
 
                 response = uploadSocket.recv(1)
-                if response == b'1':
-                    print(' [+] Chunk uploaded successfully')
+                if response != b'1':
+                    print(' [!] Unexpected error. Exiting ...')
+                    exit(1)
+                chunkTimes['upload'][chunkId]['end'] = time.time()
 
                 # Inform the TA that the chunk was created
                 # TA can later decide if it should be re-encrypted
+                chunkTimes['taStateUpdate'][chunkId] = {'start': time.time()}
                 requests.post('http://localhost:5000/chunks/state', json = {'fileId': fileMeta['fileId'], 'chunkId': chunkId, 'state': 'created'}, headers = authData)
+                chunkTimes['taStateUpdate'][chunkId]['end'] = time.time()
 
             print('[+] File created successfully')
         
+        # performance logs
+        uploadExecDuration = time.time() - uploadStartTime
+        self.logger.logPerformance('upload::total', uploadExecDuration)
+        metaCreationDuration = metaCreationEndTime - metaCreationStartTime
+        self.logger.logPerformance('upload::metaCreation', metaCreationDuration)
+        for key in chunkTimes.keys():
+            for chunkId in chunkTimes[key].keys():
+                duration = chunkTimes[key][chunkId]['end'] - chunkTimes[key][chunkId]['start']
+                self.logger.logPerformance(f'upload::{key}::{chunkId}', duration)
+
         return fileMeta['fileId']
 
     def listFiles(self):
@@ -165,37 +207,71 @@ class Client:
 
 
     def downloadFile(self, fileId):
+        downloadStartTime = time.time()
+        chunkTimes = {
+            'chunkDownload': {},
+            'taStateUpdate': {},
+            'chunkDecryption': {},
+            'fileWrite': {},
+        }
+
+        fetchFileMetaStartTime = time.time()
         timestamp, signature = self.getRequestMeta(self.admin, self.adminPrivKey)
         authData = { 'actor': self.admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
         response = requests.get(f'http://localhost:5000/files/{fileId}', headers = authData)
         responseObject = response.json()
-        opSignature = responseObject['signature']
+        opSignature = responseObject['signature'] # TODO: check if this is actually working
         fileMeta = responseObject['data']
+        fetchFileMetaEndTime = time.time()
+
         workerNodes = self.getWorkerNodes()
         outputFile = open(fileId, 'wb')
         for chunkId in fileMeta['chunks'].keys():
-            uploadSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+            chunkTimes['chunkDownload'][chunkId] = {'start': time.time()}
+            downloadSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             workerNodeId = fileMeta['chunks'][chunkId]['workerNodeIds'][0]
             workerNode = list(filter(lambda element: element['id'] == workerNodeId, workerNodes))[0]
-            uploadSocket.connect((workerNode['host'], int(workerNode['chunkFetchPort'])))
-            uploadSocket.send(dumps({'authRequest': {'fileId': fileId}, 'signature': opSignature, 'chunkId': chunkId}, ensure_ascii=False).encode('utf-8'))
+            downloadSocket.connect((workerNode['host'], int(workerNode['chunkFetchPort'])))
+            downloadSocket.send(dumps({'authRequest': {'fileId': fileId}, 'signature': opSignature, 'chunkId': chunkId}, ensure_ascii=False).encode('utf-8'))
             bytes_received = 0
             data = b''
             while bytes_received < CHUNK_SIZE+32:
                 sentLen = min(CHUNK_SIZE+32 - bytes_received, 2048)
-                data += uploadSocket.recv(sentLen)
+                data += downloadSocket.recv(sentLen)
                 bytes_received = bytes_received + sentLen
-            # receive server reply
-            uploadSocket.send(b'1')
+            # send feedback to server
+            downloadSocket.send(b'1')
+            chunkTimes['chunkDownload'][chunkId]['end'] = time.time()
 
             # Inform the TA that the chunk was read
             # TA can later decide if it should be re-encrypted
+            chunkTimes['taStateUpdate'][chunkId] = {'start': time.time()}
+            timestamp, signature = self.getRequestMeta(self.admin, self.adminPrivKey)
+            authData = { 'actor': self.admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
             requests.post('http://localhost:5000/chunks/state', json = {'fileId': fileId, 'chunkId': chunkId, 'state': 'read'}, headers = authData)
+            chunkTimes['taStateUpdate'][chunkId]['end'] = time.time()
 
+            chunkTimes['chunkDecryption'][chunkId] = {'start': time.time()}
             ctr = bytes(fileMeta['chunks'][chunkId]['encryptionMeta']['ctr'], 'utf-8')
             iv = bytes(fileMeta['chunks'][chunkId]['encryptionMeta']['iv'], 'utf-8')
             secret = bytes(fileMeta['chunks'][chunkId]['encryptionMeta']['secret'], 'utf-8')
             encryptionMeta = EncryptionMeta(secret, ctr, iv)
             plain = self.encryptionEngine.decrypt(data, encryptionMeta)
+            chunkTimes['chunkDecryption'][chunkId]['end'] = time.time()
+
+            chunkTimes['fileWrite'][chunkId] = {'start': time.time()}
             outputFile.write(plain)
+            chunkTimes['fileWrite'][chunkId]['end'] = time.time()
         outputFile.close()
+
+        # performance logs
+        downloadExecDuration = time.time() - downloadStartTime
+        self.logger.logPerformance('download::total', downloadExecDuration)
+
+        fetchFileMetaDuration = fetchFileMetaEndTime - fetchFileMetaStartTime
+        self.logger.logPerformance('download::fileMetaFetch', fetchFileMetaDuration)
+        for key in chunkTimes.keys():
+            for chunkId in chunkTimes[key].keys():
+                duration = chunkTimes[key][chunkId]['end'] - chunkTimes[key][chunkId]['start']
+                self.logger.logPerformance(f'download::{key}::{chunkId}', duration)

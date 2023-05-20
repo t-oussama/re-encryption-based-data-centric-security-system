@@ -1,3 +1,5 @@
+from datetime import datetime
+
 class ChunkMeta:
     def __init__(self, state = None, encryptionMeta = None, size = None, workerNodeIds = None, chunkId = None) -> None:
         self.state = state
@@ -5,6 +7,7 @@ class ChunkMeta:
         self.size = size
         self.workerNodeIds = workerNodeIds
         self.id = chunkId
+        self.lastAccessTime = datetime.now()
 
     def toDict(self):
         return {
@@ -13,4 +16,5 @@ class ChunkMeta:
             'size': self.size,
             'workerNodeIds': self.workerNodeIds,
             'id': self.id,
+            'lastAccessTime': self.lastAccessTime.strftime("%m/%d/%Y, %H:%M:%S"),
         }
