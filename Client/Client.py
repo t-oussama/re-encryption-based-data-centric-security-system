@@ -21,7 +21,7 @@ from common.encryption_engine.EncryptionEngine import EncryptionMeta
 import socket
 
 class Client:
-    def __init__(self, admin, logFileName):
+    def __init__(self, admin, logFileName = 'default'):
         USER_KEYS_DIR = '../user_keys'
         
         self.admin = admin

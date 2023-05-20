@@ -2,6 +2,7 @@ from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
 from Crypto.Hash import SHA256
 from common.ChunkMeta import ChunkMeta
+from threading import Thread
 
 from common.FileMeta import FileMeta
 from common.Utils import toDict
@@ -13,7 +14,7 @@ import time
 import uuid
 from datetime import datetime
 from common import constants
-from common.encryption_engine.EncryptionEngine import EncryptionEngine
+from common.encryption_engine.EncryptionEngine import EncryptionEngine, L
 
 USERS_PERMISSIONS_FILE = './authorized_users/users_permissions'
 AUTHORIZED_USERS_KEYS_DIR = './authorized_users/keys'
@@ -51,7 +52,8 @@ class TrustedAuthority:
         self.encryptionEngine = EncryptionEngine()
         self.workerRoundRobinIndex = -1
 
-        self.scheduler = Scheduler(self.config['scheduling'], self.encryptionEngine, self.workerNodes)
+        self.reEncryptionKeyGenThreads = {}
+        self.scheduler = Scheduler(self.config['scheduling'], self.encryptionEngine, self.workerNodes, self.reEncryptionKeyGenThreads)
 
     def addUser(self, username: str, key: bytes, permission: str):
         if username in self.users.keys():
@@ -150,6 +152,18 @@ class TrustedAuthority:
     
     def _reEncryptChunk(self, fileId: bytes, chunk: ChunkMeta):
         self.scheduler.scheduleReEncryption(fileId, chunk)
+
+    def _generateReEncryptionKey(self, chunk: ChunkMeta):
+        chunk.encryptionMeta.newSecret = self.encryptionEngine.genEncryptionMeta().secret
+        chunk.encryptionMeta.rk = self.encryptionEngine.getReEncryptionKey(chunk.encryptionMeta.secret, chunk.encryptionMeta.newSecret, chunk.size+L)
+    
+    def generateReEncryptionKey(self, fileId: bytes, chunkId: bytes):
+        chunk = self.files[fileId].chunks[chunkId]
+        thread = Thread(target= lambda: self._generateReEncryptionKey(chunk))
+        if not fileId in self.reEncryptionKeyGenThreads:
+            self.reEncryptionKeyGenThreads[fileId] = {}
+        self.reEncryptionKeyGenThreads[fileId][chunkId] = thread
+        thread.start()
 
     def updateChunkState(self, fileId, chunkId, state):
         if not state in CHUNK_STATES:

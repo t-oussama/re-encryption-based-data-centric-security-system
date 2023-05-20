@@ -1,20 +1,24 @@
 from datetime import datetime
 from threading import Timer
+
+from common.ChunkMeta import ChunkMeta
 from .WorkerNode import WorkerNode
 from common.encryption_engine.EncryptionEngine import L
 
 class Scheduler:
-    def __init__(self, config, encryptionEngine, workerNodes):
+    def __init__(self, config, encryptionEngine, workerNodes, reEncryptionKeyGenThreads):
         self.config = config
         self.encryptionEngine = encryptionEngine
         self.workerNodes = workerNodes
+        self.reEncryptionKeyGenThreads = reEncryptionKeyGenThreads
 
-    def _reEncrypt(self, fileId, chunk):
-        newSecret = self.encryptionEngine.genEncryptionMeta().secret
-        rk = self.encryptionEngine.getReEncryptionKey(chunk.encryptionMeta.secret, newSecret, chunk.size+L)
+    def _reEncrypt(self, fileId, chunk: ChunkMeta):
+        # wait until the reEncryption key generation thread is done
+        self.reEncryptionKeyGenThreads[fileId.decode('utf-8')][chunk.id].join()
+
         workerNode = self.workerNodes[chunk.workerNodeIds[0]]
-        WorkerNode.reEncrypt(workerNode['host'], workerNode['port'], fileId, chunk.id, rk, chunk.encryptionMeta.iv)
-        chunk.encryptionMeta.secret = newSecret
+        WorkerNode.reEncrypt(workerNode['host'], workerNode['port'], fileId, chunk.id, chunk.encryptionMeta.rk, chunk.encryptionMeta.iv)
+        chunk.encryptionMeta.secret = chunk.encryptionMeta.newSecret
 
     def scheduleReEncryption(self, fileId, chunk):
         # if we are not using lazy re-encryption, then re-encrypt instantly

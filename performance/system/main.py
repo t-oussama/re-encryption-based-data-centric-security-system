@@ -1,8 +1,8 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-logPath = '../../Client/logs/performance_test_1GB_1684356763.3420026.log'
-logPath = '../../Client/logs/performance_test_1GB_1684530626.258546.log'
+logPath = '../../Client/logs/performance_test_1GB_1684582633.3890936.log'
+# logPath = '../../Client/logs/performance_test_1GB_1684530626.258546.log'
 
 with open(logPath, 'r') as logFile:
     lines = logFile.readlines()
@@ -58,9 +58,9 @@ with open(logPath, 'r') as logFile:
     
     # check that the logged total matches the calculated total with a small margin of error
     operationSummedTotals = chunkScopedActionsTotals.groupby(['Operation'], as_index=False).sum()
-    print(operationSummedTotals)
+    print('operationSummedTotals', operationSummedTotals)
     operationLoggedTotals = df.loc[df['Action'] == 'total']
-    print(operationLoggedTotals)
+    print('operationLoggedTotals', operationLoggedTotals)
     
     fig, axes = plt.subplots(nrows=len(operations), ncols=2)
     fig.set_size_inches(18.5, 10.5)
@@ -68,5 +68,5 @@ with open(logPath, 'r') as logFile:
         operationDf = chunkScopedActionsTotals.loc[chunkScopedActionsTotals['Operation'] == operation]
         operationDf.set_index('Action').plot(y='Execution Time', kind='pie', ax=axes[i, 0])
         operationDf.plot(x = 'Action', y='Execution Time', kind='barh', ax=axes[i, 1])
-    fig.savefig('fig-pie')
+    fig.savefig('fig')
     # fig.show()

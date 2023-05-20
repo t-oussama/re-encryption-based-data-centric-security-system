@@ -125,6 +125,7 @@ def getOperationPermissionSignature():
     chunk.encryptionMeta = EncryptionMeta(bytes(encryptionMeta['secret'], 'utf-8'), bytes(encryptionMeta['ctr'], 'utf-8'), bytes(encryptionMeta['iv'], 'utf-8'))
     chunk.size = size
     chunk.workerNodeIds = workerNodeIds
+    ta.generateReEncryptionKey(fileId, chunkId)
 
     data = {
         'fileId': fileId,
@@ -187,11 +188,15 @@ def getFile(fileId):
     h = SHA256.new(bytes(json.dumps({'fileId': fileId}), 'utf-8'))
     signature = pkcs1_15.new(ta.privKey).sign(h)
     # map data chunks from bytes to strings
+
     for chunkId in data.chunks.keys():
         data.chunks[chunkId].encryptionMeta.secret = data.chunks[chunkId].encryptionMeta.secret.decode()
         data.chunks[chunkId].encryptionMeta.ctr = data.chunks[chunkId].encryptionMeta.ctr.decode()
         data.chunks[chunkId].encryptionMeta.iv = data.chunks[chunkId].encryptionMeta.iv.decode()
-    
+        del data.chunks[chunkId].encryptionMeta.rk
+        del data.chunks[chunkId].encryptionMeta.newSecret
+        ta.generateReEncryptionKey(fileId, chunkId)
+        print(data.chunks[chunkId].toDict())
     return jsonify({'data': data.toDict(), 'signature': base64.b64encode(signature).decode()})
 
 

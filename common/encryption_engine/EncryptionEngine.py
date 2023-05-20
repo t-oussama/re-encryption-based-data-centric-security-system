@@ -27,6 +27,7 @@ class EncryptionMeta:
         self.ctr = ctr
         self.iv = iv
         self.newSecret = None
+        self.rk = None
 
     def toDict(self):
         return self.__dict__
