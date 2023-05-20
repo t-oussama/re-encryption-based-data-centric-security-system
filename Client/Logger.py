@@ -5,8 +5,8 @@ class Logger:
     def log(self, line):
         self.file.write(line + '\n')
 
-    def logPerformance(self, id, duration):
-        self.log(f'{id} - {duration}')
+    def logPerformance(self, id, start, end):
+        self.log(f'{id} - {end - start} - {start} - {end}')
 
     def sizeof_fmt(self, num, suffix="B"):
         for unit in ["", "K", "M", "G", "T", "P"]:

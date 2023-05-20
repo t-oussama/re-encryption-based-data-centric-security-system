@@ -186,14 +186,11 @@ class Client:
             print('[+] File created successfully')
         
         # performance logs
-        uploadExecDuration = time.time() - uploadStartTime
-        self.logger.logPerformance('upload::total', uploadExecDuration)
-        metaCreationDuration = metaCreationEndTime - metaCreationStartTime
-        self.logger.logPerformance('upload::metaCreation', metaCreationDuration)
+        self.logger.logPerformance('upload::total', uploadStartTime, time.time())
+        self.logger.logPerformance('upload::metaCreation', metaCreationStartTime, metaCreationEndTime)
         for key in chunkTimes.keys():
             for chunkId in chunkTimes[key].keys():
-                duration = chunkTimes[key][chunkId]['end'] - chunkTimes[key][chunkId]['start']
-                self.logger.logPerformance(f'upload::{key}::{chunkId}', duration)
+                self.logger.logPerformance(f'upload::{key}::{chunkId}', chunkTimes[key][chunkId]['start'], chunkTimes[key][chunkId]['end'])
 
         return fileMeta['fileId']
 
@@ -266,12 +263,9 @@ class Client:
         outputFile.close()
 
         # performance logs
-        downloadExecDuration = time.time() - downloadStartTime
-        self.logger.logPerformance('download::total', downloadExecDuration)
+        self.logger.logPerformance('download::total', downloadStartTime, time.time())
 
-        fetchFileMetaDuration = fetchFileMetaEndTime - fetchFileMetaStartTime
-        self.logger.logPerformance('download::fileMetaFetch', fetchFileMetaDuration)
+        self.logger.logPerformance('download::fileMetaFetch', fetchFileMetaStartTime, fetchFileMetaEndTime)
         for key in chunkTimes.keys():
             for chunkId in chunkTimes[key].keys():
-                duration = chunkTimes[key][chunkId]['end'] - chunkTimes[key][chunkId]['start']
-                self.logger.logPerformance(f'download::{key}::{chunkId}', duration)
+                self.logger.logPerformance(f'download::{key}::{chunkId}', chunkTimes[key][chunkId]['start'], chunkTimes[key][chunkId]['end'])

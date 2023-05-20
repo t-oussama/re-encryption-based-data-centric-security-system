@@ -3,7 +3,7 @@ import os
 import time
 
 def sequence(fileSize):
-    client = Client('user1', f'performance_test_{fileSize}_{time.time()}')
+    client = Client('user1', f'performance_test_{fileSize}')
 
     # create new user
     newUserName = 'new_test_user'
