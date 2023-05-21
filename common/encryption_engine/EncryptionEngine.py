@@ -17,10 +17,6 @@ class KeyPair:
         self.publicKey: bytes = publicKey
         self.cypher = None
 
-
-# key1 = enc.generate_permutation_key(prfKey1, L*8)
-# key2 = enc.generate_permutation_key(prfKey2, L*8)
-# key3 = enc.generate_permutation_key(prfKey3, n)
 class EncryptionMeta:
     def __init__(self, secret, ctr, iv = None):
         self.secret = secret
@@ -33,8 +29,8 @@ class EncryptionMeta:
         return self.__dict__
 
 class EncryptionEngine:
-    def __init__(self, config = None) -> None:
-        self.enc = AontBasedEncryption()
+    def __init__(self, blockSize = 32) -> None:
+        self.enc = AontBasedEncryption(blockSize)
 
     def __generateEncryptionContext__(self, secret):
         prfKey1 = SHA256.new(data=secret).digest()
@@ -43,8 +39,8 @@ class EncryptionEngine:
         return prfKey1, prfKey2, prfKey3
 
     def genEncryptionMeta(self):
-        secret = b''.join(secrets.choice(string.ascii_letters + string.digits).encode() for i in range(L))
-        ctr = b''.join(secrets.choice(string.ascii_letters + string.digits).encode() for i in range(L))
+        secret = b''.join(secrets.choice(string.ascii_letters + string.digits).encode() for i in range(self.enc.getBlockSize()))
+        ctr = b''.join(secrets.choice(string.ascii_letters + string.digits).encode() for i in range(self.enc.getBlockSize()))
         return EncryptionMeta(secret, ctr)
 
     def encrypt(self, message, encryptionMeta):
@@ -57,21 +53,6 @@ class EncryptionEngine:
         prfKey1, prfKey2, prfKey3 = self.__generateEncryptionContext__(encryptionMeta.secret)
         return self.enc.decrypt(encryptionMeta.ctr, prfKey1, prfKey2, prfKey3, ciphertext, encryptionMeta.iv)
 
-    # def reEncrypt(self, ciphertext, oldSecret, newSecret, iv):
-    #     prfKey1, prfKey2, prfKey3 = self.__generateEncryptionContext__(oldSecret)
-    #     newPrfKey1, newPrfKey2, newPrfKey3 = self.__generateEncryptionContext__(newSecret)
-    #     key1 = self.enc.generate_permutation_key(prfKey1, L*8)
-    #     key2 = self.enc.generate_permutation_key(prfKey2, L*8)
-    #     key3 = self.enc.generate_permutation_key(prfKey3, len(ciphertext)//L - 1)
-
-    #     newKey1 = self.enc.generate_permutation_key(newPrfKey1, L*8)
-    #     newKey2 = self.enc.generate_permutation_key(newPrfKey2, L*8)
-    #     newKey3 = self.enc.generate_permutation_key(newPrfKey3, len(ciphertext)//L - 1)
-
-    #     reEncryptionKey1 = self.enc.find_conversion_key(key1, newKey1)
-    #     reEncryptionKey3 = self.enc.find_conversion_key(key3, newKey3)
-    #     return self.enc.re_encrypt(reEncryptionKey1, key2, newKey2, reEncryptionKey3, iv, ciphertext)
-
     def reEncrypt(self, ciphertext, reEncryptionKey, iv):
         reEncryptionKey1 = reEncryptionKey['reEncryptionKey1']
         key2 = reEncryptionKey['key2']
@@ -82,25 +63,17 @@ class EncryptionEngine:
     def getReEncryptionKey(self, oldSecret, newSecret, ciphertextLen):
         prfKey1, prfKey2, prfKey3 = self.__generateEncryptionContext__(oldSecret)
         newPrfKey1, newPrfKey2, newPrfKey3 = self.__generateEncryptionContext__(newSecret)
-        key1 = self.enc.generate_permutation_key(prfKey1, L*8)
-        key2 = self.enc.generate_permutation_key(prfKey2, L*8)
-        key3 = self.enc.generate_permutation_key(prfKey3, ciphertextLen//L - 1)
+        key1 = self.enc.generate_permutation_key(prfKey1, self.enc.getBlockSize()*8)
+        key2 = self.enc.generate_permutation_key(prfKey2, self.enc.getBlockSize()*8)
+        key3 = self.enc.generate_permutation_key(prfKey3, ciphertextLen//self.enc.getBlockSize() - 1)
 
-        newKey1 = self.enc.generate_permutation_key(newPrfKey1, L*8)
-        newKey2 = self.enc.generate_permutation_key(newPrfKey2, L*8)
-        newKey3 = self.enc.generate_permutation_key(newPrfKey3, ciphertextLen//L - 1)
+        newKey1 = self.enc.generate_permutation_key(newPrfKey1, self.enc.getBlockSize()*8)
+        newKey2 = self.enc.generate_permutation_key(newPrfKey2, self.enc.getBlockSize()*8)
+        newKey3 = self.enc.generate_permutation_key(newPrfKey3, ciphertextLen//self.enc.getBlockSize() - 1)
 
         reEncryptionKey1 = self.enc.find_conversion_key(key1, newKey1)
         reEncryptionKey3 = self.enc.find_conversion_key(key3, newKey3)
         return {'reEncryptionKey1': reEncryptionKey1, 'reEncryptionKey3': reEncryptionKey3, 'key2': key2, 'newKey2': newKey2}
 
-
-# if __name__ == '__main__':
-#     ee = EncryptionEngine()
-#     meta, c = ee.encrypt(b'a'*L*4, EncryptionMeta( b'0'*L, 'A'*L))
-#     # msg = ee.decrypt(c, b'0'*L, iv)
-#     # print(msg)
-#     rk = ee.getReEncryptionKey(b'0'*L, b'1'*L, len(c))
-#     newIv, new_c = ee.reEncrypt(c, rk, meta.iv)
-#     msg = ee.decrypt(new_c, EncryptionMeta( b'1'*L, 'A'*L, meta.iv))
-#     print(msg)
+    def getBlockSize(self):
+        return self.enc.get_block_size()

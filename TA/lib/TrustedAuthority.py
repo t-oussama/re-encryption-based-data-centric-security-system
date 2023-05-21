@@ -14,7 +14,7 @@ import time
 import uuid
 from datetime import datetime
 from common import constants
-from common.encryption_engine.EncryptionEngine import EncryptionEngine, L
+from common.encryption_engine.EncryptionEngine import EncryptionEngine
 
 USERS_PERMISSIONS_FILE = './authorized_users/users_permissions'
 AUTHORIZED_USERS_KEYS_DIR = './authorized_users/keys'
@@ -155,7 +155,7 @@ class TrustedAuthority:
 
     def _generateReEncryptionKey(self, chunk: ChunkMeta):
         chunk.encryptionMeta.newSecret = self.encryptionEngine.genEncryptionMeta().secret
-        chunk.encryptionMeta.rk = self.encryptionEngine.getReEncryptionKey(chunk.encryptionMeta.secret, chunk.encryptionMeta.newSecret, chunk.size+L)
+        chunk.encryptionMeta.rk = self.encryptionEngine.getReEncryptionKey(chunk.encryptionMeta.secret, chunk.encryptionMeta.newSecret, chunk.size+self.enc.getBlockSize())
     
     def generateReEncryptionKey(self, fileId: bytes, chunkId: bytes):
         chunk = self.files[fileId].chunks[chunkId]

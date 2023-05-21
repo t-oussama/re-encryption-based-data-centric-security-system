@@ -196,7 +196,6 @@ def getFile(fileId):
         del data.chunks[chunkId].encryptionMeta.rk
         del data.chunks[chunkId].encryptionMeta.newSecret
         ta.generateReEncryptionKey(fileId, chunkId)
-        print(data.chunks[chunkId].toDict())
     return jsonify({'data': data.toDict(), 'signature': base64.b64encode(signature).decode()})
 
 

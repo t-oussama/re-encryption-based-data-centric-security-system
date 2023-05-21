@@ -18,8 +18,7 @@ using std::chrono::nanoseconds;
 #define MILLI_TO_NANO_FACTOR 1000000
 
 #define PRF_KEY_LEN SHA256_DIGEST_LENGTH
-#define L PRF_KEY_LEN
-
+#define PRF_CTR_LEN SHA256_DIGEST_LENGTH
 using namespace std;
 
 void print(const char* label, const unsigned char* var, const unsigned int len) {
@@ -47,7 +46,8 @@ void print(const char* label, unsigned int* var, const unsigned int len) {
 }
 
 class AontBasedEncryption {
-    public:
+    private:
+        unsigned int blockSize;
 
         unsigned char* AllOrNothingTransform(unsigned char *ctr, unsigned char *m, unsigned int n) {
             // TODO: make keyGen random
@@ -57,181 +57,65 @@ class AontBasedEncryption {
             unsigned char prfKey[PRF_KEY_LEN];
             SHA256(keyGen, keyGenLength, prfKey);
 
-            const unsigned int messageLength = n*L;
-            unsigned char *x = new unsigned char[messageLength+L];
-            unsigned int counterMaxBytesCount = (n / 256) + 1;
-            counterMaxBytesCount = min(counterMaxBytesCount, (unsigned int) L);
-            unsigned int prefixLength = L - counterMaxBytesCount;
+            // Generate the Prf counter based on ctr
+            unsigned char prfCtr[PRF_KEY_LEN];
+            SHA256(ctr, this->blockSize, prfCtr);
 
-            // TODO: check if it's okay that aes block size is 16 but L is 32 (otherwise look for laternatives)
-            {
-                EVP_CIPHER_CTX *ctx;
-                ctx = EVP_CIPHER_CTX_new();
-                EVP_EncryptInit_ex(ctx, EVP_aes_256_ctr(), NULL, prfKey, ctr);
-                int len, ciphertext_len;
-                EVP_EncryptUpdate(ctx, x, &len, (unsigned char*)m, messageLength);
-                ciphertext_len = len;
-                EVP_EncryptFinal_ex(ctx, x + len, &len);
-                ciphertext_len += len;
-                /* Clean up */
-                EVP_CIPHER_CTX_free(ctx);
-            }
-            // for (unsigned int i = 0; i < n; i++) {
-            //     memcpy(ctr+prefixLength, &i, sizeof(i));
-            //     unsigned char *blockRand = this->PseudoRandomFunction(ctr , L, prfKey);
-            //     for (unsigned int j = 0; j < L; j++) {
-            //         x[i*L+j] = m[i*L+j] ^ blockRand[j];
-            //     }
-            //     delete[] blockRand;
-            // }
+            const unsigned int messageLength = n*this->blockSize;
+            unsigned char *cipher = new unsigned char[messageLength+this->blockSize];
 
-            // calc hash of x
+            // Encrypt the plaintext using CTR
+            AesCtrEncrypt(m, messageLength, cipher, prfKey, prfCtr);
+
+            // calc hash of the encrypted plaintext
             unsigned char token[SHA256_DIGEST_LENGTH];
-            SHA256(x, messageLength, token);
-            for(unsigned int i = 0; i < L; i++) {
+            SHA256(cipher, messageLength, token);
+            // Generate token as hash xor encryption key
+            for(unsigned int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
                 token[i] ^= prfKey[i];
             }
-            // memcpy(x+messageLength, token, L);
-            
-            unsigned char ctrCopy[32];
-            memcpy(ctrCopy, ctr, 32);
-            // unsigned char hash[L];
-            // for (unsigned int i = 0; i < n; i++) {
-            //     memcpy(ctrCopy+prefixLength, &i, sizeof(i));
-            //     for (unsigned int j = 0; j < L; j++) {
-            //         token[j] = x[messageLength+j] ^ ctrCopy[j];
-            //     }
-            //     for(int j = 0; j < L/SHA256_DIGEST_LENGTH; j++) {//TODO: useless
-            //         SHA256(token, L, hash);
-            //     }
-            //     for (unsigned int j = 0; j < L; j++) {
-            //         x[i*L+j] ^= hash[j];
-            //     }
-            // }
-            // return x;
-            {
-                for (unsigned int j = 0; j < L; j++) {
-                    ctrCopy[j] ^= token[j];
-                }                
-                EVP_CIPHER_CTX *ctx;
-                ctx = EVP_CIPHER_CTX_new();
-                unsigned char fixedKey[33] = "12345678901234561234567890123456";
-                unsigned char* cipher = new unsigned char[messageLength+L];
-                EVP_EncryptInit_ex(ctx, EVP_aes_256_ctr(), NULL, fixedKey, ctrCopy);
-                int len, ciphertext_len;
-                EVP_EncryptUpdate(ctx, cipher, &len, (unsigned char*)x, messageLength);
-                ciphertext_len = len;
-                EVP_EncryptFinal_ex(ctx, cipher + len, &len);
-                ciphertext_len += len;
-                /* Clean up */
-                EVP_CIPHER_CTX_free(ctx);
-                memcpy(cipher+messageLength, token, L);
+
+            // copy token
+            memcpy(cipher+messageLength, token, SHA256_DIGEST_LENGTH);
+
+            // pad the token with random bits until it reaches size this->blockSize
+            // to get random bits use an encryption function
+            unsigned int paddingLength = this->blockSize - SHA256_DIGEST_LENGTH;
+            if (paddingLength <= 0) {
                 return cipher;
             }
+            unsigned char* plainTokenPadding = new unsigned char[paddingLength]();
+            unsigned char* randomTokenPadding = new unsigned char[paddingLength]();
+            AesCtrEncrypt(plainTokenPadding, paddingLength, randomTokenPadding, prfKey, prfCtr);
+            // copy token padding
+            memcpy(cipher+messageLength+SHA256_DIGEST_LENGTH, randomTokenPadding, paddingLength);
+
+            return cipher;
         }
 
         unsigned char* AllOrNothingRevert(unsigned char *ctr, unsigned char *cipher, unsigned char* token, unsigned int n) {
-            const unsigned int messageLength = n*L;
+            const unsigned int messageLength = n*this->blockSize;
             unsigned char* m = new unsigned char[messageLength];
-            unsigned char* x = new unsigned char[messageLength];
-            // unsigned char* token = x + messageLength;
-            unsigned int counterMaxBytesCount = (n / 256) + 1;
-            counterMaxBytesCount = min(counterMaxBytesCount, (unsigned int) L);
-            unsigned int prefixLength = L - counterMaxBytesCount;
             
-            // for (unsigned int i = 0; i < n; i++) {
-            //     memcpy(ctr+prefixLength, &i, sizeof(i));
-            //     for (unsigned int j = 0; j < L; j++) {
-            //         m[i*L+j] = x[i*L + j] ^ token[j] ^ ctr[j];
-            //     }
-            // }
-            unsigned char hash[L];
-            unsigned char xoredToken[L];
-            unsigned char ctrCopy[32];
-            memcpy(ctrCopy, ctr, 32);
-            // for (unsigned int i = 0; i < n; i++) {
-            //     memcpy(ctrCopy+prefixLength, &i, sizeof(i));
-            //     for (unsigned int j = 0; j < L; j++) {
-            //         xoredToken[j] = token[j] ^ ctrCopy[j];
-            //     }
-            //     for(int j = 0; j < L/SHA256_DIGEST_LENGTH; j++) { //TODO: useless
-            //         SHA256(xoredToken, L, hash);
-            //     }
-            //     for (unsigned int j = 0; j < L; j++) {
-            //         x[i*L+j] = x[i*L+j] ^ hash[j];
-            //     }
-            // }
-            { // TODO: check if it's secure to use encryption here.
-                for (unsigned int j = 0; j < L; j++) {
-                    ctrCopy[j] ^= token[j];
-                }
-                EVP_CIPHER_CTX *ctx;
-                ctx = EVP_CIPHER_CTX_new();
-                unsigned char fixedKey[33] = "12345678901234561234567890123456";
-                EVP_DecryptInit_ex(ctx, EVP_aes_256_ctr(), NULL, fixedKey, ctrCopy);
-                int len, ciphertext_len;
-                EVP_DecryptUpdate(ctx, x, &len, cipher, messageLength);
-                ciphertext_len = len;
-                EVP_DecryptFinal_ex(ctx, x + len, &len);
-                ciphertext_len += len;
-                /* Clean up */
-                EVP_CIPHER_CTX_free(ctx);
-            }
+            // Generate the Prf counter based on ctr
+            unsigned char prfCtr[PRF_KEY_LEN];
+            SHA256(ctr, this->blockSize, prfCtr);
 
-            // calc hash of m
+            // calc hash of encrypted message
             unsigned char prfKey[SHA256_DIGEST_LENGTH];
-            SHA256(x, messageLength, prfKey);
-            for(unsigned int i = 0; i < L; i++) {
+            SHA256(cipher, messageLength, prfKey);
+            // find the encryption key by xoring hash and token
+            for(unsigned int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
                 prfKey[i] ^= token[i];
             }
 
-
-            EVP_CIPHER_CTX *ctx;
-            ctx = EVP_CIPHER_CTX_new();
-            EVP_EncryptInit_ex(ctx, EVP_aes_256_ctr(), NULL, prfKey, ctr);
-            int len, ciphertext_len;
-            EVP_EncryptUpdate(ctx, m, &len, (unsigned char*)x, messageLength);
-            ciphertext_len = len;
-            EVP_EncryptFinal_ex(ctx, m + len, &len);
-            ciphertext_len += len;
-            /* Clean up */
-            EVP_CIPHER_CTX_free(ctx);
-            // for (unsigned int i = 0; i < n; i++) {
-            //     memcpy(ctr+prefixLength, &i, sizeof(i));
-            //     unsigned char *blockRand = this->PseudoRandomFunction(ctr , L, prfKey);
-            //     for (unsigned int j = 0; j < L; j++) {
-            //         m[i*L+j] ^= blockRand[j];
-            //     }
-            //     delete[] blockRand;
-            // }
-
+            AesCtrDecrypt(cipher, messageLength, m, prfKey, prfCtr);
             return m;
         }
 
-        unsigned char* PseudoRandomFunction(const unsigned char* bytes, const unsigned int size, const unsigned char* keyBytes) {
-            // unsigned char* plainTextKey = (unsigned char*)"01234567890123456789012345678901";
-            AES_KEY key;
-            AES_set_encrypt_key(keyBytes, 256, &key);
-            unsigned char* result = new unsigned char[size];
-            // TODO: don't leave this as a hard coded value
-            char iv[17] = "1234567890123456";
-            AES_cbc_encrypt((unsigned char*)bytes, result, size, &key, (unsigned char*)iv, AES_ENCRYPT);
-            return result;
-
-            // // TODO: only works for simple case of size = SHA256_DIGEST_LENGTH
-            // unsigned char* result = new unsigned char[SHA256_DIGEST_LENGTH];
-            // SHA256_CTX sha256;
-            // SHA256_Init(&sha256);
-            // SHA256_Update(&sha256, bytes, size);
-            // SHA256_Update(&sha256, keyBytes, PRF_KEY_LEN);
-            // SHA256_Final(result, &sha256);
-            // return result;
-        }
-
-        unsigned char* AesCtr(unsigned char* plaintext, unsigned int plaintextLength, unsigned char* key, unsigned char* counter) {
+        void AesCtrEncrypt(unsigned char* plaintext, unsigned int plaintextLength, unsigned char* cipher, unsigned char* key, unsigned char* counter) {
             EVP_CIPHER_CTX *ctx;
             ctx = EVP_CIPHER_CTX_new();
-            unsigned char* cipher = new unsigned char[plaintextLength];
             EVP_EncryptInit_ex(ctx, EVP_aes_256_ctr(), NULL, key, counter);
             int len, ciphertext_len;
             EVP_EncryptUpdate(ctx, cipher, &len, plaintext, plaintextLength);
@@ -240,21 +124,33 @@ class AontBasedEncryption {
             ciphertext_len += len;
             /* Clean up */
             EVP_CIPHER_CTX_free(ctx);
-            return cipher;
+        }
+
+        void AesCtrDecrypt(unsigned char* cipher, unsigned int originalPlaintextLength, unsigned char* plaintext, unsigned char* key, unsigned char* counter) {
+            EVP_CIPHER_CTX *ctx;
+            ctx = EVP_CIPHER_CTX_new();
+            EVP_DecryptInit_ex(ctx, EVP_aes_256_ctr(), NULL, key, counter);
+            int len, ciphertext_len;
+            EVP_DecryptUpdate(ctx, plaintext, &len, (unsigned char*)cipher, originalPlaintextLength);
+            ciphertext_len = len;
+            EVP_DecryptFinal_ex(ctx, plaintext + len, &len);
+            ciphertext_len += len;
+            /* Clean up */
+            EVP_CIPHER_CTX_free(ctx);
         }
 
         unsigned char* PermutationEncryption(const unsigned char *input, const unsigned int *permutations, unsigned int n) {
-            unsigned char* result = new unsigned char[n*L];
+            unsigned char* result = new unsigned char[n*this->blockSize];
             for(unsigned int i = 0; i < n; i++) {
-                memcpy(result+i*L, input+permutations[i]*L, L);
+                memcpy(result+i*this->blockSize, input+permutations[i]*this->blockSize, this->blockSize);
             }
             return result;
         }
 
         unsigned char* PermutationDecryption(const unsigned char *input, const unsigned int *permutations, unsigned int n) {
-            unsigned char* result = new unsigned char[n*L];
+            unsigned char* result = new unsigned char[n*this->blockSize];
             for(unsigned int i = 0; i < n; i++) {
-                memcpy(result+permutations[i]*L, input+i*L, L);
+                memcpy(result+permutations[i]*this->blockSize, input+i*this->blockSize, this->blockSize);
             }
             return result;
         }
@@ -324,39 +220,41 @@ class AontBasedEncryption {
         }
 
     public:
-        AontBasedEncryption() { }
+        AontBasedEncryption(int blockSize) {
+            this->blockSize = blockSize;
+        }
 
-        // prfKey is of size L
         unsigned int* GeneratePermutationKey(unsigned char* prfKey, const unsigned int permutationKeyLen) {
             unsigned int* permutationKey = new unsigned int[permutationKeyLen];
             unsigned char** tmp = new unsigned char*[permutationKeyLen];
 
             size_t tmpUnitSize = sizeof(unsigned int);
             unsigned char* x = new unsigned char[tmpUnitSize*permutationKeyLen]{0};
-            // auto t1 = high_resolution_clock::now();
+            auto t1 = high_resolution_clock::now();
             long long cost = 0;
             for (unsigned int i = 0; i < permutationKeyLen; i++) {
                 permutationKey[i] = i;
                 memcpy(x + i*tmpUnitSize, &i, tmpUnitSize);
             }
 
-            // TODO: counte probably shouldn't be a constant
-            unsigned char counter[L+1] = {0};
+            // TODO: counter probably shouldn't be a constant
+            unsigned char counter[PRF_CTR_LEN] = {0};
             // TODO: check if this can be further improved and if using aes ctr
             // causes any security risk
-            auto fullTmp = AesCtr(x , tmpUnitSize*permutationKeyLen, prfKey, counter);
+            unsigned char* fullTmp = new unsigned char[tmpUnitSize*permutationKeyLen];
+            AesCtrEncrypt(x , tmpUnitSize*permutationKeyLen, fullTmp, prfKey, counter);
             for (unsigned int i = 0; i < permutationKeyLen; i++) {
                 tmp[i] = fullTmp + i*tmpUnitSize;
             }
 
             delete[] x;
-            // auto t2 = high_resolution_clock::now();
-            // cout << "       PRF took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            auto t2 = high_resolution_clock::now();
+            cout << "       PRF took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
 
-            // t1 = high_resolution_clock::now();
+            t1 = high_resolution_clock::now();
             quickSort(permutationKey, tmp, 0, permutationKeyLen, tmpUnitSize);
-            // t2 = high_resolution_clock::now();
-            // cout << "       Sorting took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            t2 = high_resolution_clock::now();
+            cout << "       Sorting took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
             // clean up
             // for (unsigned int i = 0; i < permutationKeyLen; i++) {
             //     delete[] tmp[i];
@@ -368,55 +266,54 @@ class AontBasedEncryption {
         }
 
         unsigned char** Encrypt(unsigned char* ctr, unsigned char* prfKey1, unsigned char* prfKey2, unsigned char* prfKey3, unsigned char* message, const unsigned int msgLen, const unsigned int n) {
-            // auto t = high_resolution_clock::now();
-            auto permKey1 = GeneratePermutationKey(prfKey1, L*8);
-            auto permKey2 = GeneratePermutationKey(prfKey2, L*8);
+            auto t = high_resolution_clock::now();
+            auto permKey1 = GeneratePermutationKey(prfKey1, this->blockSize*8);
+            auto permKey2 = GeneratePermutationKey(prfKey2, this->blockSize*8);
             
-            // auto t1 = high_resolution_clock::now();
+            auto t1 = high_resolution_clock::now();
             auto permKey3 = GeneratePermutationKey(prfKey3, n);
-            // auto t2 = high_resolution_clock::now();
-            // cout << "Key 3 generation took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            auto t2 = high_resolution_clock::now();
+            cout << "Key 3 generation took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
 
-            const unsigned int messageLength = n*L;
-            unsigned char* iv = new unsigned char [L];
-            memcpy(iv, ctr, L);
-            unsigned char* cipher = new unsigned char[messageLength+L];
-            // t1 = high_resolution_clock::now();
+            const unsigned int messageLength = n*this->blockSize;
+            unsigned char* cipher = new unsigned char[messageLength+this->blockSize];
+            t1 = high_resolution_clock::now();
             unsigned char* m1 = AllOrNothingTransform(ctr, message, n);
-            // t2 = high_resolution_clock::now();
-            // cout << "AONT took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            t2 = high_resolution_clock::now();
+            cout << "AONT took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
 
             unsigned char* m2 = PermutationEncryption(m1, permKey3, n);
             delete[] permKey3;
 
-            auto encryptedToken = BitPermutationEncryption(m1+messageLength, permKey1, L);
+            auto encryptedToken = BitPermutationEncryption(m1+messageLength, permKey1, this->blockSize);
             delete[] m1;
             
-            auto encryptedIv = BitPermutationEncryption(iv, permKey2, L);
-            for(unsigned int i = 0; i < L; i++) {
+            unsigned char* iv = new unsigned char [this->blockSize];
+            memcpy(iv, ctr, this->blockSize); // TODO_L: should IV really be the same as ctr ?
+            auto encryptedIv = BitPermutationEncryption(iv, permKey2, this->blockSize);
+            for(unsigned int i = 0; i < this->blockSize; i++) {
                 encryptedToken[i] = encryptedToken[i] ^ encryptedIv[i];
             }
             delete[] encryptedIv;
-            memcpy(cipher, encryptedToken, L);
+            memcpy(cipher, encryptedToken, this->blockSize);
             delete[] encryptedToken;
 
-            // t1 = high_resolution_clock::now();
-            // long long k1 = 0, k2 = 0, xor_t = 0, cpy = 0;
+            t1 = high_resolution_clock::now();
             for (unsigned int i = 0; i < n; i++) {
-                auto x = BitPermutationEncryption(m2+i*L, permKey1, L);
-                auto y = BitPermutationEncryption(cipher+i*L, permKey2, L);
+                auto x = BitPermutationEncryption(m2+i*this->blockSize, permKey1, this->blockSize);
+                auto y = BitPermutationEncryption(cipher+i*this->blockSize, permKey2, this->blockSize);
 
-                for(unsigned int j = 0; j < L; j++) {
+                for(unsigned int j = 0; j < this->blockSize; j++) {
                     x[j] = x[j] ^ y[j];
                 }
                 delete[] y;
 
-                memcpy(cipher+i*L+L, x, L);
+                memcpy(cipher+(i+1)*this->blockSize, x, this->blockSize);
                 delete[] x;
             }
-            // cout << endl;
-            // t2 = high_resolution_clock::now();
-            // cout << "Generating final cihper took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            cout << endl;
+            t2 = high_resolution_clock::now();
+            cout << "Generating final cihper took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
 
             delete[] m2;
             delete[] permKey1;
@@ -426,37 +323,37 @@ class AontBasedEncryption {
             res[0] = iv;
             res[1] = cipher;
 
-            // cout << "TOTAL took: " << duration_cast<milliseconds>(high_resolution_clock::now() - t).count() << endl;
+            cout << "TOTAL took: " << duration_cast<milliseconds>(high_resolution_clock::now() - t).count() << endl;
             return res;
         }
 
         unsigned char* Decrypt(unsigned char* ctr, unsigned char* prfKey1, unsigned char* prfKey2, unsigned char* prfKey3, unsigned char* cipher, const unsigned int cipherLen, const unsigned char* iv, const unsigned int n) {
             // Generate permutation keys
-            auto permKey1 = GeneratePermutationKey(prfKey1, L*8);
-            auto permKey2 = GeneratePermutationKey(prfKey2, L*8);
+            auto permKey1 = GeneratePermutationKey(prfKey1, this->blockSize*8);
+            auto permKey2 = GeneratePermutationKey(prfKey2, this->blockSize*8);
 
-            unsigned char* m2 = new unsigned char[n*L];
+            unsigned char* m2 = new unsigned char[n*this->blockSize];
             
             for (unsigned int i = 0; i < n; i++) {
-                auto y = BitPermutationEncryption(cipher+(n-i-1)*L, permKey2, L);
-                for(unsigned int j = 0; j < L; j++) {
-                    y[j] ^= cipher[(n-i)*L+j];
+                auto y = BitPermutationEncryption(cipher+(n-i-1)*this->blockSize, permKey2, this->blockSize);
+                for(unsigned int j = 0; j < this->blockSize; j++) {
+                    y[j] ^= cipher[(n-i)*this->blockSize+j];
                 }
-                auto x = BitPermutationDecryption(y, permKey1, L);
+                auto x = BitPermutationDecryption(y, permKey1, this->blockSize);
                 delete[] y;
-                memcpy(m2+(n-1-i)*L, x, L);
+                memcpy(m2+(n-1-i)*this->blockSize, x, this->blockSize);
                 delete[] x;
             }
 
-            auto encryptedIv = BitPermutationEncryption(iv, permKey2, L);
+            auto encryptedIv = BitPermutationEncryption(iv, permKey2, this->blockSize);
             delete[] permKey2;
-            auto encryptedToken = new unsigned char[L];
-            for(unsigned int j = 0; j < L; j++) {
+            auto encryptedToken = new unsigned char[this->blockSize];
+            for(unsigned int j = 0; j < this->blockSize; j++) {
                     encryptedToken[j] = cipher[j] ^ encryptedIv[j];
             }
             delete[] encryptedIv;
 
-            auto token = BitPermutationDecryption(encryptedToken, permKey1, L);
+            auto token = BitPermutationDecryption(encryptedToken, permKey1, this->blockSize);
             delete[] permKey1;
             delete[] encryptedToken;
 
@@ -487,16 +384,16 @@ class AontBasedEncryption {
         }
 
         unsigned char** ReEncrypt(unsigned int* reEncryptionKey1, unsigned int* originalKey2, unsigned int* newKey2, unsigned int* reEncryptionKey3, unsigned char* iv, unsigned char* cipher, unsigned int n) {
-            unsigned char* c1 = new unsigned char[n*L];
+            unsigned char* c1 = new unsigned char[n*this->blockSize];
             
             for (unsigned int i = 0; i < n; i++) {
-                auto y = BitPermutationEncryption(cipher+(n-i-1)*L, originalKey2, L);
-                for(unsigned int j = 0; j < L; j++) {
-                    y[j] ^= cipher[(n-i)*L+j];
+                auto y = BitPermutationEncryption(cipher+(n-i-1)*this->blockSize, originalKey2, this->blockSize);
+                for(unsigned int j = 0; j < this->blockSize; j++) {
+                    y[j] ^= cipher[(n-i)*this->blockSize+j];
                 }
-                auto x = BitPermutationEncryption(y, reEncryptionKey1, L);
+                auto x = BitPermutationEncryption(y, reEncryptionKey1, this->blockSize);
                 delete[] y;
-                memcpy(c1+(n-1-i)*L, x, L);
+                memcpy(c1+(n-1-i)*this->blockSize, x, this->blockSize);
                 delete[] x;
             }
 
@@ -504,36 +401,36 @@ class AontBasedEncryption {
 
             delete[] c1;
 
-            auto encryptedIv1 = BitPermutationEncryption(iv, originalKey2, L);
-            auto encryptedIv2 = BitPermutationEncryption(iv, newKey2, L);
-            auto encryptedToken = new unsigned char[L];
-            for(unsigned int j = 0; j < L; j++) {
+            auto encryptedIv1 = BitPermutationEncryption(iv, originalKey2, this->blockSize);
+            auto encryptedIv2 = BitPermutationEncryption(iv, newKey2, this->blockSize);
+            auto encryptedToken = new unsigned char[this->blockSize];
+            for(unsigned int j = 0; j < this->blockSize; j++) {
                 encryptedToken[j] = cipher[j] ^ encryptedIv1[j];
             }
             delete[] encryptedIv1;
 
-            auto token = BitPermutationEncryption(encryptedToken, reEncryptionKey1, L);
+            auto token = BitPermutationEncryption(encryptedToken, reEncryptionKey1, this->blockSize);
 
-            for(unsigned int j = 0; j < L; j++) {
+            for(unsigned int j = 0; j < this->blockSize; j++) {
                 encryptedToken[j] = token[j] ^ encryptedIv2[j];
             }
             delete[] encryptedIv2;
             delete[] token;
 
-            auto c2 = new unsigned char[n*L + L];
-            memcpy(c2+L, c2_tmp, n*L);
-            memcpy(c2, encryptedToken, L);
+            auto c2 = new unsigned char[n*this->blockSize + this->blockSize];
+            memcpy(c2+this->blockSize, c2_tmp, n*this->blockSize);
+            memcpy(c2, encryptedToken, this->blockSize);
             delete[] encryptedToken;
             delete[] c2_tmp;
 
             for (unsigned int i = 0; i < n; i++) {
-                auto y = BitPermutationEncryption(c2+i*L, newKey2, L);
+                auto y = BitPermutationEncryption(c2+i*this->blockSize, newKey2, this->blockSize);
 
-                for(unsigned int j = 0; j < L; j++) {
-                    y[j] = c2[(i+1)*L+j] ^ y[j];
+                for(unsigned int j = 0; j < this->blockSize; j++) {
+                    y[j] = c2[(i+1)*this->blockSize+j] ^ y[j];
                 }
 
-                memcpy(c2+(i+1)*L, y, L);
+                memcpy(c2+(i+1)*this->blockSize, y, this->blockSize);
                 delete[] y;
             }
 
@@ -543,71 +440,18 @@ class AontBasedEncryption {
             return res;
         }
 
-        unsigned char* AesCbc(const unsigned char* bytes, const unsigned int size, const unsigned char* keyBytes) {
-            // auto t = high_resolution_clock::now();
-            // unsigned char* plainTextKey = (unsigned char*)"01234567890123456789012345678901";
-            AES_KEY key;
-            AES_set_encrypt_key(keyBytes, 256, &key);
-            unsigned char* ciphertext = new unsigned char[size];
-            // TODO: don't leave this as a hard coded value
-            char iv[17] = "1234567890123456";
-            AES_cbc_encrypt((unsigned char*)bytes, ciphertext, size, &key, (unsigned char*)iv, AES_ENCRYPT);
-            // cout << "AES TOTAL took: " << duration_cast<milliseconds>(high_resolution_clock::now() - t).count() << endl;
-            return ciphertext;
+        unsigned int GetBlockSize() {
+            return this->blockSize;
         }
 };
 
 extern "C" {
-    AontBasedEncryption* AontBasedEncryption_new(){ return new AontBasedEncryption(); }
-    void AontBasedEncryption_Test(AontBasedEncryption* enc) {
-        unsigned char keyGen[] = {'a', 'b', 'c', '3' , '9'};
-        const int keyGenLength = 5;
-
-        unsigned char prfKey1[L] = {'1'};
-        unsigned char prfKey2[L] = {'2'};
-        unsigned char prfKey3[L] = {'3'};
-
-        unsigned char ctr[] = "00000000000000000000000000000000";
-        unsigned char message[] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-        const unsigned int msgLen = 64;
-        const unsigned int n = 2;
-        // auto res = enc->Encrypt(ctr, prfKey1, prfKey2, prfKey3, message, msgLen, n);
-
-        // auto iv = res[0];
-        // auto cipher = res[1];
-        // auto plain = enc->Decrypt(ctr, prfKey1, prfKey2, prfKey3, cipher, msgLen + L, iv, n);
-
-        // for(int i=  0; i < 64; i++) {
-        //     cout << plain[i];
-        // }
-        auto permKey1 = enc->GeneratePermutationKey(prfKey1, L*8);
-        auto permKey2 = enc->GeneratePermutationKey(prfKey2, L*8);
-        auto x = enc->BitPermutationEncryption(message, permKey1, L);
-        auto ck = enc->FindConversionKey(permKey1, permKey2, L*8);
-        auto y = enc->BitPermutationEncryption(x, ck, L);
-        auto z = enc->BitPermutationEncryption(message, permKey2, L);
-        // printBytes("x (enc with key1)", x, L);
-        // printBytes("y (enc with ck)", y, L);
-        // printBytes("z (enc with key2)", z, L);
-        // cout << endl;
-        // cout << "-----------------------------------------------------" << endl;
-        // cout << "-----------------------------------------------------" << endl;
-        // print("permKey1", permKey1, L*8);
-        // cout << "-----------------------------------------------------" << endl;
-        // print("permKey2", permKey2, L*8);
-        // cout << "-----------------------------------------------------" << endl;
-        // print("ck", ck, L*8);
-        // cout << "-----------------------------------------------------" << endl;
-    }
+    AontBasedEncryption* AontBasedEncryption_new(unsigned int blockSize){ return new AontBasedEncryption(blockSize); }
     unsigned char** AontBasedEncryption_Encrypt(AontBasedEncryption* enc, unsigned char* ctr, unsigned char* prfKey1, unsigned char* prfKey2, unsigned char* prfKey3, unsigned char* message, const unsigned int msgLen, const unsigned int n) {
         return enc->Encrypt(ctr, prfKey1, prfKey2, prfKey3, message, msgLen, n);
     }
     unsigned char* AontBasedEncryption_Decrypt(AontBasedEncryption* enc, unsigned char* ctr, unsigned char* prfKey1, unsigned char* prfKey2, unsigned char* prfKey3, unsigned char* cipher, const unsigned int cipherLen, const unsigned char* iv, const unsigned int n) {
         return enc->Decrypt(ctr, prfKey1, prfKey2, prfKey3, cipher, cipherLen, iv, n);
-    }
-    // for testing purposes only
-    unsigned char* AontBasedEncryption_AesCbc(AontBasedEncryption* enc, const unsigned char* bytes, const unsigned int size, const unsigned char* keyBytes) {
-        return enc->AesCbc(bytes, size, keyBytes);
     }
 
     unsigned int* AontBasedEncryption_FindConversionKey(AontBasedEncryption* enc, unsigned int* permutationListA, unsigned int* permutationListB, const unsigned int n) {
@@ -620,5 +464,9 @@ extern "C" {
 
     unsigned int* AontBasedEncryption_GeneratePermutationKey(AontBasedEncryption* enc, unsigned char* prfKey, const unsigned int permutationKeyLen) {
         return enc->GeneratePermutationKey(prfKey, permutationKeyLen);
+    }
+
+    unsigned int AontBasedEncryption_GetBlockSize(AontBasedEncryption* enc) {
+        return enc->GetBlockSize();
     }
 }

@@ -3,7 +3,6 @@ from threading import Timer
 
 from common.ChunkMeta import ChunkMeta
 from .WorkerNode import WorkerNode
-from common.encryption_engine.EncryptionEngine import L
 
 class Scheduler:
     def __init__(self, config, encryptionEngine, workerNodes, reEncryptionKeyGenThreads):

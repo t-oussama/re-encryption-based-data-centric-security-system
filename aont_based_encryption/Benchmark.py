@@ -1,13 +1,14 @@
 import time
 
-from AontBasedEncryption import AontBasedEncryption, L
+from AontBasedEncryption import AontBasedEncryption
 
-enc = AontBasedEncryption()
+L = 128
+enc = AontBasedEncryption(L)
 
-ctr = b'0' * L
-prfKey1 = b'1'*L
-prfKey2 = b'2'*L
-prfKey3 = b'3'*L
+ctr = b'0' * enc.getBlockSize()
+prfKey1 = b'1'*enc.getBlockSize()
+prfKey2 = b'2'*enc.getBlockSize()
+prfKey3 = b'3'*enc.getBlockSize()
 # # message = b'ABCD'*(64//4)
 
 # Bytes to use
@@ -43,6 +44,7 @@ if msg == message:
 else:
     print('messages do not match')
 
+exit(0)
 # print('-----------------------------------------------')
 # c = enc.aes_enc(message, DATA_INPUT_SIZE, 'A'*32)
 # print('Encrypted (AES)')
@@ -50,27 +52,27 @@ else:
 
 # Re-encryption
 start = time.time()
-newPrfKey1 = b'4'*L
-newPrfKey2 = b'5'*L
-newPrfKey3 = b'6'*L
+newPrfKey1 = b'4'*enc.getBlockSize()
+newPrfKey2 = b'5'*enc.getBlockSize()
+newPrfKey3 = b'6'*enc.getBlockSize()
 
 print('Creating re-encryption key 1')
 keyStart = time.time()
-key1 = enc.generate_permutation_key(prfKey1, L*8)
-newKey1 = enc.generate_permutation_key(newPrfKey1, L*8)
+key1 = enc.generate_permutation_key(prfKey1, enc.getBlockSize()*8)
+newKey1 = enc.generate_permutation_key(newPrfKey1, enc.getBlockSize()*8)
 reEncryptionKey1 = enc.find_conversion_key(key1, newKey1)
 execTimes['key1Gen'] = time.time() - keyStart
 
 print('Creating re-encryption key 2')
 keyStart = time.time()
-key2 = enc.generate_permutation_key(prfKey2, L*8)
-newKey2 = enc.generate_permutation_key(newPrfKey2, L*8)
+key2 = enc.generate_permutation_key(prfKey2, enc.getBlockSize()*8)
+newKey2 = enc.generate_permutation_key(newPrfKey2, enc.getBlockSize()*8)
 execTimes['key2Gen'] = time.time() - keyStart
 
 print('Creating re-encryption key 3')
 keyStart = time.time()
-key3 = enc.generate_permutation_key(prfKey3, len(message)//L)
-newKey3 = enc.generate_permutation_key(newPrfKey3, len(message)//L)
+key3 = enc.generate_permutation_key(prfKey3, len(message)//enc.getBlockSize())
+newKey3 = enc.generate_permutation_key(newPrfKey3, len(message)//enc.getBlockSize())
 reEncryptionKey3 = enc.find_conversion_key(key3, newKey3)
 execTimes['key3Gen'] = time.time() - keyStart
 

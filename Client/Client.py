@@ -14,7 +14,7 @@ import time
 import base64
 import requests
 import os
-from common.constants import CHUNK_SIZE, L
+from common.constants import CHUNK_SIZE
 from common.encryption_engine.EncryptionEngine import EncryptionEngine
 from common.encryption_engine.EncryptionEngine import EncryptionMeta
 
