@@ -30,14 +30,12 @@ class Client:
         self.adminPrivKey = RSA.import_key(f.read())
         f = open(f'{USER_KEYS_DIR}/{self.admin}/pub.key','r')
         self.adminPubKey = RSA.import_key(f.read())
-        # TODO: enable this again and start using config object in the code
-        # # Get encryption engine config
-        # timestamp, signature = self.getRequestMeta(self.admin, self.adminPrivKey)
-        # authData = { 'actor': self.admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
-        # response = requests.get('http://localhost:5000/encryption-engine/config', headers = authData)
-        # config = response.text
-        # print(config)
-        self.encryptionEngine = EncryptionEngine()
+
+        # Get encryption engine config
+        response = requests.get('http://localhost:5000/encryption-engine/config')
+        config = response.json()['data']
+
+        self.encryptionEngine = EncryptionEngine(config['block_size'])
         self.logger = Logger(logFileName)
 
     def getRequestMeta(self, username, key):

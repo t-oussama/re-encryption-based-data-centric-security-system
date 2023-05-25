@@ -12,7 +12,7 @@ lib.AontBasedEncryption_Decrypt.restype = POINTER(c_ubyte)
 lib.AontBasedEncryption_FindConversionKey.restype = POINTER(c_uint)
 lib.AontBasedEncryption_ReEncrypt.restype = POINTER(POINTER(c_ubyte))
 lib.AontBasedEncryption_GeneratePermutationKey.restype = POINTER(c_uint)
-lib.AontBasedEncryption_GetBlockSize.restype = c_uint
+lib.AontBasedEncryption_GetBlockSize.restype = c_int
 lib.AontBasedEncryption_FindConversionKey.argtypes = [c_void_p, POINTER(c_uint), POINTER(c_uint), c_uint]
 lib.AontBasedEncryption_ReEncrypt.argtypes = [c_void_p, POINTER(c_uint), POINTER(c_uint), POINTER(c_uint), POINTER(c_uint), c_void_p, c_void_p, c_uint]
 

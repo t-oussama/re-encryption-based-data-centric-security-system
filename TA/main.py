@@ -20,7 +20,7 @@ with open('config.yaml', 'r') as file:
 app = flask.Flask(__name__)
 app.config['DEBUG'] = config['http']['debug']
 
-ta = TrustedAuthority(config['re_encryption'])
+ta = TrustedAuthority(config['trusted_authority'])
 
 ## Verifies user permissions on an application level:
 #   * R: user can't create new files, but can write to existing ones if owner gives him to associated permission.
@@ -98,9 +98,6 @@ def getWorkerNodes():
 
 @app.route('/encryption-engine/config', methods=['GET'])
 def getEncryptionEngineConfig():
-    if not auth(request, 'A'):
-        return {'error': 'User is not authorized'}, 403
-
     try:
         config = ta.getEncryptionEngineConfig()
     except Exception as e:

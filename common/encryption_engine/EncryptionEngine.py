@@ -39,7 +39,9 @@ class EncryptionEngine:
         return prfKey1, prfKey2, prfKey3
 
     def genEncryptionMeta(self):
+        print('......................................................')
         secret = b''.join(secrets.choice(string.ascii_letters + string.digits).encode() for i in range(self.enc.getBlockSize()))
+        print('......................................................')
         ctr = b''.join(secrets.choice(string.ascii_letters + string.digits).encode() for i in range(self.enc.getBlockSize()))
         return EncryptionMeta(secret, ctr)
 

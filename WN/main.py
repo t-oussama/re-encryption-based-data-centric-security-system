@@ -44,8 +44,11 @@ response = requests.get('http://' + TA_IP + ':' + str(TA_PORT) + '/meta')
 taPublicKey = RSA.import_key(base64.b64decode(bytes(response.json()['publicKey'], 'utf-8')))
 uploadThreads = []
 
+# Get encryption engine config
+response = requests.get('http://localhost:5000/encryption-engine/config')
+encryptionEngineConfig = response.json()['data']
 
-encryptionEngine = EncryptionEngine()
+encryptionEngine = EncryptionEngine(encryptionEngineConfig['block_size'])
 
 def handleChunkWrite(conn):
     metaBytes = conn.recv(1024)

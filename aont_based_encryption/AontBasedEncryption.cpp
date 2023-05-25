@@ -47,7 +47,7 @@ void print(const char* label, unsigned int* var, const unsigned int len) {
 
 class AontBasedEncryption {
     private:
-        unsigned int blockSize;
+        int blockSize;
 
         unsigned char* AllOrNothingTransform(unsigned char *ctr, unsigned char *m, unsigned int n) {
             // TODO: make keyGen random

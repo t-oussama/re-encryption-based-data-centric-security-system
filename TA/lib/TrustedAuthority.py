@@ -49,11 +49,11 @@ class TrustedAuthority:
             print(f'    [*] Loaded {username} - {permission}')
             f.close()
 
-        self.encryptionEngine = EncryptionEngine()
+        self.encryptionEngine = EncryptionEngine(self.config['encryption_engine']['block_size'])
         self.workerRoundRobinIndex = -1
 
         self.reEncryptionKeyGenThreads = {}
-        self.scheduler = Scheduler(self.config['scheduling'], self.encryptionEngine, self.workerNodes, self.reEncryptionKeyGenThreads)
+        self.scheduler = Scheduler(self.config['re_encryption']['scheduling'], self.encryptionEngine, self.workerNodes, self.reEncryptionKeyGenThreads)
 
     def addUser(self, username: str, key: bytes, permission: str):
         if username in self.users.keys():
@@ -173,7 +173,7 @@ class TrustedAuthority:
         chunk.state = state
         chunk.lastAccessTime = datetime.now()
         
-        if (state == 'read' and self.config['triggers']['read']) or (state == 'created' and self.config['triggers']['write']):
+        if (state == 'read' and self.config['re_encryption']['triggers']['read']) or (state == 'created' and self.config['re_encryption']['triggers']['write']):
             self._reEncryptChunk(fileId.encode(), chunk)
             return True
         return False
@@ -197,6 +197,9 @@ class TrustedAuthority:
             return
 
         self.users[userId].files.remove(fileId)
+
+    def getEncryptionEngineConfig(self):
+        return self.config['encryption_engine']
 
     def persistState(self):
         ## Cleanup

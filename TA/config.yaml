@@ -3,10 +3,14 @@ http:
   port: 5000
   debug: false
 
-re_encryption:
-  triggers:
-    read: true
-    write: true
-  scheduling:
-    lazy: false
-    lastAccessTimeOffset: 300 # In seconds
+trusted_authority:
+  re_encryption:
+    triggers:
+      read: true
+      write: true
+    scheduling:
+      lazy: false
+      lastAccessTimeOffset: 300 # In seconds
+
+  encryption_engine:
+    block_size: 512
