@@ -17,9 +17,9 @@ lib.AontBasedEncryption_FindConversionKey.argtypes = [c_void_p, POINTER(c_uint),
 lib.AontBasedEncryption_ReEncrypt.argtypes = [c_void_p, POINTER(c_uint), POINTER(c_uint), POINTER(c_uint), POINTER(c_uint), c_void_p, c_void_p, c_uint]
 
 class AontBasedEncryption(object):
-    def __init__(self, blockSize):
+    def __init__(self, blockSize, logPerformance):
         self.blockSize = blockSize
-        self.obj = lib.AontBasedEncryption_new(blockSize)
+        self.obj = lib.AontBasedEncryption_new(blockSize, logPerformance)
 
     def test(self):
         lib.AontBasedEncryption_Test(self.obj)
@@ -53,5 +53,12 @@ class AontBasedEncryption(object):
         return res[0:permutationKeyLen]
         # return list(map(lambda x: c_uint(x), res[0:permutationKeyLen]))
 
-    def getBlockSize(self):
+    def get_block_size(self):
         return lib.AontBasedEncryption_GetBlockSize(self.obj)
+
+    def validate(self):
+        return lib.AontBasedEncryption_Tests(self.blockSize)
+    
+
+aont_enc = AontBasedEncryption(64, False)
+aont_enc.validate()

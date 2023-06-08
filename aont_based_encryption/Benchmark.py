@@ -3,7 +3,7 @@ import time
 from AontBasedEncryption import AontBasedEncryption
 
 L = 128
-enc = AontBasedEncryption(L)
+enc = AontBasedEncryption(L, True)
 
 ctr = b'0' * enc.getBlockSize()
 prfKey1 = b'1'*enc.getBlockSize()

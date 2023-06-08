@@ -2,7 +2,8 @@ import json
 import matplotlib.pyplot as plt
 import numpy as np
 
-LOG = 'blockSizeBenchmark.log'
+suffix = '_1GB'
+LOG = f'blockSizeBenchmark{suffix}.log'
 
 f = open(LOG, 'r')
 
@@ -34,9 +35,9 @@ def visualize(data, figureName):
         axs[i].set_title(metric)
     plt.savefig(f'{figureName}.png')
 
-visualize(data, 'fullData')
+visualize(data, f'fullData{suffix}')
 
-visualize(data[:-3], 'closeValuesOnly')
+visualize(data[:-3], f'closeValuesOnly{suffix}')
 
 f.close()
 

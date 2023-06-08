@@ -1,7 +1,7 @@
 import sys
 import os
 
-from simplejson import dumps
+from simplejson import dumps, loads
 from Logger import Logger
 
 BASE_DIR = os.path.dirname(__file__)
@@ -34,10 +34,9 @@ class Client:
         # # Get encryption engine config
         # timestamp, signature = self.getRequestMeta(self.admin, self.adminPrivKey)
         # authData = { 'actor': self.admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
-        # response = requests.get('http://localhost:5000/encryption-engine/config', headers = authData)
-        # config = response.text
-        # print(config)
-        self.encryptionEngine = EncryptionEngine()
+        response = requests.get('http://localhost:5000/encryption-engine/config') #, headers = authData)
+        self.encryptionEngineConfig = loads(response.text)['data']
+        self.encryptionEngine = EncryptionEngine(self.encryptionEngineConfig['blockSize'], self.encryptionEngineConfig['logPerformance'])
         self.logger = Logger(logFileName)
 
     def getRequestMeta(self, username, key):

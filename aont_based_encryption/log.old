@@ -1,0 +1,28 @@
+Encrypting
+Encrypted
+Execution time 16.700783729553223 
+
+
+Decrypting ...
+Decrypted
+Execution time 18.279818773269653 
+
+
+Correctly decrypted
+Creating re-encryption key 1
+Creating re-encryption key 2
+Creating re-encryption key 3
+Keys generated
+Execution time 11.831501483917236 
+
+
+ReEncrypting ...
+ReEncrypted
+Execution time 15.646745920181274 
+
+
+Decrypted
+Correctly decrypted
+-------------------------------------
+Results
+ {'enc': 16.700783729553223, 'dec': 18.279818773269653, 'key1Gen': 0.0002067089080810547, 'key2Gen': 5.054473876953125e-05, 'key3Gen': 11.831233739852905, 'keyGen': 11.831501483917236, 'reEnc': 15.646745920181274}

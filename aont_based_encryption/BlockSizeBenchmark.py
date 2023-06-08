@@ -4,25 +4,25 @@ import sys
 
 from AontBasedEncryption import AontBasedEncryption
 
-logFile = open('blockSizeBenchmark.log', 'a')
+suffix = '_1GB'
+
+logFile = open(f'blockSizeBenchmark{suffix}.log', 'a')
 
 blockSize = int(sys.argv[1])
 print(f'*** Encrypting using blocksize {blockSize} ***')
 
-enc = AontBasedEncryption(blockSize)
+enc = AontBasedEncryption(blockSize, True)
 
 ctr = b'0' * enc.getBlockSize()
 prfKey1 = b'1'*enc.getBlockSize()
 prfKey2 = b'2'*enc.getBlockSize()
 prfKey3 = b'3'*enc.getBlockSize()
-# # message = b'ABCD'*(64//4)
 
 # Bytes to use
 # DATA_INPUT_SIZE = 1*1024*1024*1024
-DATA_INPUT_SIZE = 512*1024*1024
 
-fo = open("../data/random_text", "rb+")
-message = fo.read(DATA_INPUT_SIZE)
+fo = open(f"../data/random_text{suffix}", "rb+")
+message = fo.read()
 fo.close()
 
 logs = { 'blockSize': blockSize }

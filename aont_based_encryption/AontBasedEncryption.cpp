@@ -48,6 +48,7 @@ void print(const char* label, unsigned int* var, const unsigned int len) {
 class AontBasedEncryption {
     private:
         unsigned int blockSize;
+        bool logPerformance;
 
         unsigned char* AllOrNothingTransform(unsigned char *ctr, unsigned char *m, unsigned int n) {
             // TODO: make keyGen random
@@ -220,8 +221,9 @@ class AontBasedEncryption {
         }
 
     public:
-        AontBasedEncryption(int blockSize) {
+        AontBasedEncryption(int blockSize, bool logPerformance = false) {
             this->blockSize = blockSize;
+            this->logPerformance = logPerformance;
         }
 
         unsigned int* GeneratePermutationKey(unsigned char* prfKey, const unsigned int permutationKeyLen) {
@@ -249,12 +251,16 @@ class AontBasedEncryption {
 
             delete[] x;
             auto t2 = high_resolution_clock::now();
-            cout << "       PRF took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            if (this->logPerformance) {
+                cout << "       PRF took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            }
 
             t1 = high_resolution_clock::now();
             quickSort(permutationKey, tmp, 0, permutationKeyLen, tmpUnitSize);
             t2 = high_resolution_clock::now();
-            cout << "       Sorting took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            if (this->logPerformance) {
+                cout << "       Sorting took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            }
             // clean up
             // for (unsigned int i = 0; i < permutationKeyLen; i++) {
             //     delete[] tmp[i];
@@ -273,14 +279,18 @@ class AontBasedEncryption {
             auto t1 = high_resolution_clock::now();
             auto permKey3 = GeneratePermutationKey(prfKey3, n);
             auto t2 = high_resolution_clock::now();
-            cout << "Key 3 generation took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            if (this->logPerformance) {
+                cout << "Key 3 generation took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            }
 
             const unsigned int messageLength = n*this->blockSize;
             unsigned char* cipher = new unsigned char[messageLength+this->blockSize];
             t1 = high_resolution_clock::now();
             unsigned char* m1 = AllOrNothingTransform(ctr, message, n);
             t2 = high_resolution_clock::now();
-            cout << "AONT took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            if (this->logPerformance) {
+                cout << "AONT took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            }
 
             unsigned char* m2 = PermutationEncryption(m1, permKey3, n);
             delete[] permKey3;
@@ -313,7 +323,9 @@ class AontBasedEncryption {
             }
             cout << endl;
             t2 = high_resolution_clock::now();
-            cout << "Generating final cihper took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            if (this->logPerformance) {
+                cout << "Generating final cihper took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            }
 
             delete[] m2;
             delete[] permKey1;
@@ -323,7 +335,9 @@ class AontBasedEncryption {
             res[0] = iv;
             res[1] = cipher;
 
-            cout << "TOTAL took: " << duration_cast<milliseconds>(high_resolution_clock::now() - t).count() << endl;
+            if (this->logPerformance) {
+                cout << "TOTAL took: " << duration_cast<milliseconds>(high_resolution_clock::now() - t).count() << endl;
+            }
             return res;
         }
 
@@ -443,10 +457,105 @@ class AontBasedEncryption {
         unsigned int GetBlockSize() {
             return this->blockSize;
         }
+
+        void test() {
+            // create a message of 5 blocks
+            const int n = 5;
+            const unsigned int messageLength = blockSize * n;
+            unsigned char message[messageLength];
+            for (unsigned int i = 0; i < messageLength; i++) {
+                message[i] = 'a';
+            }
+
+            unsigned char ctr[blockSize];
+            for (unsigned int i = 0; i < blockSize; i++) {
+                ctr[i] = '0';
+            }
+
+            auto aont_result = this->AllOrNothingTransform(ctr, message, n);
+            unsigned char* paddedToken = aont_result+messageLength;
+            auto aont_revert = this->AllOrNothingRevert(ctr, aont_result, paddedToken, n);
+            
+            bool aont_check = true;
+            for (unsigned int i = 0; i < messageLength; i++) {
+                if (message[i] != aont_revert[i]) {
+                    aont_check = false;
+                }
+            }
+
+            cout << "AONT test " << (aont_check ? "success" : "failed") << endl;
+
+            {
+                unsigned char keyGen[] = {'a', 'b', 'c', '3' , '9'};
+                const int keyGenLength = 5;
+                // Generate the Prf key based on keyGen
+                unsigned char prfKey[PRF_KEY_LEN];
+                SHA256(keyGen, keyGenLength, prfKey);
+                auto permKey = GeneratePermutationKey(prfKey, n);
+                unsigned char* permEncrypted = PermutationEncryption(message, permKey, n);
+                unsigned char* permDecrypted = PermutationDecryption(permEncrypted, permKey, n);
+                bool permutation_check = true;
+                for (unsigned int i = 0; i < messageLength; i++) {
+                    if (message[i] != permDecrypted[i]) {
+                        permutation_check = false;
+                    }
+                }
+
+                cout << "Permutation test " << (permutation_check ? "success" : "failed") << endl;
+            }
+
+            // Bit Permutation encryption test
+            {
+                unsigned char keyGen[] = {'a', 'b', 'c', '3' , '9'};
+                const int keyGenLength = 5;
+                // Generate the Prf key based on keyGen
+                unsigned char prfKey[PRF_KEY_LEN];
+                SHA256(keyGen, keyGenLength, prfKey);
+                auto permKey = GeneratePermutationKey(prfKey, this->blockSize*8);
+                unsigned char* permEncrypted = BitPermutationEncryption(message, permKey, blockSize);
+                unsigned char* permDecrypted = BitPermutationDecryption(permEncrypted, permKey, blockSize);
+                bool bit_permutation_check = true;
+                for (unsigned int i = 0; i < blockSize; i++) {
+                    if (message[i] != permDecrypted[i]) {
+                        bit_permutation_check = false;
+                    }
+                }
+
+                cout << "Bit Permutation test " << (bit_permutation_check ? "success" : "failed") << endl;
+            }
+
+            // Full encryption/decryption test
+            {
+                unsigned char keyGen[] = {'a', 'b', 'c', '3' , '9'};
+                const int keyGenLength = 5;
+                // Generate the Prf key based on keyGen
+                unsigned char prfKey1[PRF_KEY_LEN];
+                SHA256(keyGen, keyGenLength, prfKey1);
+                unsigned char prfKey2[PRF_KEY_LEN];
+                SHA256(keyGen, keyGenLength, prfKey2);
+                unsigned char prfKey3[PRF_KEY_LEN];
+                SHA256(keyGen, keyGenLength, prfKey3);
+
+                unsigned char** res = Encrypt(ctr, prfKey1, prfKey2, prfKey3, message, messageLength, n);
+                unsigned char* iv = res[0];
+                unsigned char* cipher = res[1];
+                auto plain = Decrypt(ctr, prfKey1, prfKey2, prfKey3, cipher, messageLength+blockSize, iv, n);
+                
+                bool success = true;
+                for (unsigned int i = 0; i < messageLength; i++) {
+                    if (message[i] != plain[i]) {
+                        success = false;
+                    }
+                }
+
+                cout << "Full Encryption/decryption test " << (success ? "success" : "failed") << endl;
+            }
+
+        }
 };
 
 extern "C" {
-    AontBasedEncryption* AontBasedEncryption_new(unsigned int blockSize){ return new AontBasedEncryption(blockSize); }
+    AontBasedEncryption* AontBasedEncryption_new(unsigned int blockSize, bool logPerformance){ return new AontBasedEncryption(blockSize, logPerformance); }
     unsigned char** AontBasedEncryption_Encrypt(AontBasedEncryption* enc, unsigned char* ctr, unsigned char* prfKey1, unsigned char* prfKey2, unsigned char* prfKey3, unsigned char* message, const unsigned int msgLen, const unsigned int n) {
         return enc->Encrypt(ctr, prfKey1, prfKey2, prfKey3, message, msgLen, n);
     }
@@ -468,5 +577,10 @@ extern "C" {
 
     unsigned int AontBasedEncryption_GetBlockSize(AontBasedEncryption* enc) {
         return enc->GetBlockSize();
+    }
+
+    void AontBasedEncryption_Tests(unsigned int blockSize) {
+        auto enc = new AontBasedEncryption(blockSize);
+        enc->test();
     }
 }

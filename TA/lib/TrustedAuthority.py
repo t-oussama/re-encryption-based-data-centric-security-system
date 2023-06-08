@@ -49,7 +49,7 @@ class TrustedAuthority:
             print(f'    [*] Loaded {username} - {permission}')
             f.close()
 
-        self.encryptionEngine = EncryptionEngine()
+        self.encryptionEngine = EncryptionEngine(self.config['blockSize'], self.config['logPerformance'])
         self.workerRoundRobinIndex = -1
 
         self.reEncryptionKeyGenThreads = {}
@@ -155,7 +155,7 @@ class TrustedAuthority:
 
     def _generateReEncryptionKey(self, chunk: ChunkMeta):
         chunk.encryptionMeta.newSecret = self.encryptionEngine.genEncryptionMeta().secret
-        chunk.encryptionMeta.rk = self.encryptionEngine.getReEncryptionKey(chunk.encryptionMeta.secret, chunk.encryptionMeta.newSecret, chunk.size+self.enc.getBlockSize())
+        chunk.encryptionMeta.rk = self.encryptionEngine.getReEncryptionKey(chunk.encryptionMeta.secret, chunk.encryptionMeta.newSecret, chunk.size+self.encryptionEngine.getBlockSize())
     
     def generateReEncryptionKey(self, fileId: bytes, chunkId: bytes):
         chunk = self.files[fileId].chunks[chunkId]
@@ -197,6 +197,9 @@ class TrustedAuthority:
             return
 
         self.users[userId].files.remove(fileId)
+    
+    def getEncryptionEngineConfig(self):
+        return self.config
 
     def persistState(self):
         ## Cleanup
