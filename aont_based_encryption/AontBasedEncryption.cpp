@@ -47,7 +47,7 @@ void print(const char* label, unsigned int* var, const unsigned int len) {
 
 class AontBasedEncryption {
     private:
-        unsigned int blockSize;
+        int blockSize;
         bool logPerformance;
 
         unsigned char* AllOrNothingTransform(unsigned char *ctr, unsigned char *m, unsigned int n) {
@@ -454,7 +454,7 @@ class AontBasedEncryption {
             return res;
         }
 
-        unsigned int GetBlockSize() {
+        int GetBlockSize() {
             return this->blockSize;
         }
 
@@ -555,7 +555,9 @@ class AontBasedEncryption {
 };
 
 extern "C" {
-    AontBasedEncryption* AontBasedEncryption_new(unsigned int blockSize, bool logPerformance){ return new AontBasedEncryption(blockSize, logPerformance); }
+    AontBasedEncryption* AontBasedEncryption_new(int blockSize, bool logPerformance) {
+        return new AontBasedEncryption(blockSize, logPerformance);
+    }
     unsigned char** AontBasedEncryption_Encrypt(AontBasedEncryption* enc, unsigned char* ctr, unsigned char* prfKey1, unsigned char* prfKey2, unsigned char* prfKey3, unsigned char* message, const unsigned int msgLen, const unsigned int n) {
         return enc->Encrypt(ctr, prfKey1, prfKey2, prfKey3, message, msgLen, n);
     }
@@ -575,11 +577,11 @@ extern "C" {
         return enc->GeneratePermutationKey(prfKey, permutationKeyLen);
     }
 
-    unsigned int AontBasedEncryption_GetBlockSize(AontBasedEncryption* enc) {
+    int AontBasedEncryption_GetBlockSize(AontBasedEncryption* enc) {
         return enc->GetBlockSize();
     }
 
-    void AontBasedEncryption_Tests(unsigned int blockSize) {
+    void AontBasedEncryption_Tests(int blockSize) {
         auto enc = new AontBasedEncryption(blockSize);
         enc->test();
     }

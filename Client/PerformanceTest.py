@@ -10,7 +10,7 @@ def sequence(fileSize):
     client.addUser(newUserName, 'A')
 
     # upload file
-    localFilePath = f'/home/oussama/Workspace/research/re-encryption/data/random_text_{fileSize}'
+    localFilePath = f'../data/random_text_{fileSize}'
     remoteDirectory = '/'
     remoteFilename = f'test_{fileSize}'
     usersWithReadOnly = 'user3'

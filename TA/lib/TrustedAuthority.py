@@ -49,7 +49,7 @@ class TrustedAuthority:
             print(f'    [*] Loaded {username} - {permission}')
             f.close()
 
-        self.encryptionEngine = EncryptionEngine(self.config['blockSize'], self.config['logPerformance'])
+        self.encryptionEngine = EncryptionEngine(self.config['encryption_engine']['blockSize'], self.config['encryption_engine']['logPerformance'])
         self.workerRoundRobinIndex = -1
 
         self.reEncryptionKeyGenThreads = {}

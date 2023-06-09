@@ -7,6 +7,9 @@ BASE_DIR = os.path.dirname(__file__)
 libcrypto = CDLL(f'{BASE_DIR if len(BASE_DIR) > 0 else "."}/libcrypto.so.1.1', mode=RTLD_GLOBAL)
 lib = cdll.LoadLibrary(f'{BASE_DIR if len(BASE_DIR) > 0 else "."}/bin/libAontBasedEncryption.so')
 
+class AontBasedEncryptionType (Structure):
+    pass
+
 lib.AontBasedEncryption_Encrypt.restype = POINTER(POINTER(c_ubyte))
 lib.AontBasedEncryption_Decrypt.restype = POINTER(c_ubyte)
 lib.AontBasedEncryption_FindConversionKey.restype = POINTER(c_uint)
@@ -15,11 +18,13 @@ lib.AontBasedEncryption_GeneratePermutationKey.restype = POINTER(c_uint)
 lib.AontBasedEncryption_GetBlockSize.restype = c_int
 lib.AontBasedEncryption_FindConversionKey.argtypes = [c_void_p, POINTER(c_uint), POINTER(c_uint), c_uint]
 lib.AontBasedEncryption_ReEncrypt.argtypes = [c_void_p, POINTER(c_uint), POINTER(c_uint), POINTER(c_uint), POINTER(c_uint), c_void_p, c_void_p, c_uint]
+lib.AontBasedEncryption_new.restype = POINTER(AontBasedEncryptionType)
+# lib.AontBasedEncryption_new.argtypes = [c_int, bool]
 
 class AontBasedEncryption(object):
     def __init__(self, blockSize, logPerformance):
         self.blockSize = blockSize
-        self.obj = lib.AontBasedEncryption_new(blockSize, logPerformance)
+        self.obj = lib.AontBasedEncryption_new(self.blockSize, logPerformance)
 
     def test(self):
         lib.AontBasedEncryption_Test(self.obj)
@@ -60,5 +65,5 @@ class AontBasedEncryption(object):
         return lib.AontBasedEncryption_Tests(self.blockSize)
     
 
-aont_enc = AontBasedEncryption(64, False)
-aont_enc.validate()
+# aont_enc = AontBasedEncryption(64, False)
+# aont_enc.validate()

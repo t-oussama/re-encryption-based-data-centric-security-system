@@ -26,7 +26,7 @@ def uploadFile():
     # usersWithReadOnly = input('Comma separated list of users with Read Only access (u1, u2, u3...): ')
     # usersWithReadWrite = input('Comma separated list of users with Read Write access (u1, u2, u3...): ')
 
-    localFilePath = '/home/oussama/Workspace/research/re-encryption/data/random_text'
+    localFilePath = '../data/random_text'
     remoteDirectory = '/'
     remoteFilename = 'test'
     usersWithReadOnly = 'user3'

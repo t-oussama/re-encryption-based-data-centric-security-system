@@ -4,7 +4,7 @@ import os
 client = Client('user1', 'scenario_1')
 
 # upload 5MB file
-localFilePath = '/home/oussama/Workspace/research/re-encryption/data/random_text'
+localFilePath = '../data/random_text'
 remoteDirectory = '/'
 remoteFilename = 'test'
 usersWithReadOnly = 'user3'
