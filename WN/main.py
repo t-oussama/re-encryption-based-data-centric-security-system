@@ -14,6 +14,8 @@ import socket
 import threading
 import yaml
 
+import hashlib
+
 from common.encryption_engine.EncryptionEngine import EncryptionEngine
 
 configFile = 'config.yaml'

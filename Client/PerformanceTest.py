@@ -46,6 +46,6 @@ def sequence(fileSize):
     # os.system(f'rm -r ../WN/data/{fileId}')
     print('[+] DONE')
 
-fileSizes = ['1GB', '2GB', '3GB']
+fileSizes = ['5MB', '1GB'] #, '2GB', '3GB']
 for fileSize in fileSizes:
     sequence(fileSize)

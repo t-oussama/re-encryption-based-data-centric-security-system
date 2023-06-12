@@ -108,7 +108,7 @@ class TrustedAuthority:
     def getReEncryptionKey(self, oldSecret, newSecret, ciphertextLen):
         return self.encryptionEngine.getReEncryptionKey(oldSecret, newSecret, ciphertextLen)
 
-    def getWorkerNodeForNewFile(self):
+    def _getWorkerNodeForNewFile(self):
         if self.workerRoundRobinIndex == len(self.workerNodes.keys()) - 1:
             self.workerRoundRobinIndex = 0
         else:
@@ -126,7 +126,7 @@ class TrustedAuthority:
         chunks = {}
         for i in range(0, chunksCount):
             chunkId = str(uuid.uuid4())
-            chunks[chunkId] = ChunkMeta(workerNodeIds=[self.getWorkerNodeForNewFile()], chunkId=chunkId)
+            chunks[chunkId] = ChunkMeta(workerNodeIds=[self._getWorkerNodeForNewFile()], chunkId=chunkId)
         # TODO: validate readOnly & readWrite users. They must:
         #  * exist in self.users
         #  * not exist in both lists as the same time
@@ -198,8 +198,8 @@ class TrustedAuthority:
 
         self.users[userId].files.remove(fileId)
     
-    def getEncryptionEngineConfig(self):
-        return self.config
+    # def getEncryptionEngineConfig(self):
+    #     return self.config
 
     def getEncryptionEngineConfig(self):
         return self.config['encryption_engine']

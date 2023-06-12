@@ -4,6 +4,8 @@ from threading import Timer
 from common.ChunkMeta import ChunkMeta
 from .WorkerNode import WorkerNode
 
+import hashlib
+
 class Scheduler:
     def __init__(self, config, encryptionEngine, workerNodes, reEncryptionKeyGenThreads):
         self.config = config
@@ -14,7 +16,6 @@ class Scheduler:
     def _reEncrypt(self, fileId, chunk: ChunkMeta):
         # wait until the reEncryption key generation thread is done
         self.reEncryptionKeyGenThreads[fileId.decode('utf-8')][chunk.id].join()
-
         workerNode = self.workerNodes[chunk.workerNodeIds[0]]
         WorkerNode.reEncrypt(workerNode['host'], workerNode['port'], fileId, chunk.id, chunk.encryptionMeta.rk, chunk.encryptionMeta.iv)
         chunk.encryptionMeta.secret = chunk.encryptionMeta.newSecret

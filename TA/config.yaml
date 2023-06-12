@@ -12,5 +12,5 @@ trusted_authority:
       lazy: false
       lastAccessTimeOffset: 300 # In seconds
   encryption_engine:
-    blockSize: 64
+    blockSize: 1024
     logPerformance: false

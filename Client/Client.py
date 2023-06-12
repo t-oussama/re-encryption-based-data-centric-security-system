@@ -30,10 +30,7 @@ class Client:
         self.adminPrivKey = RSA.import_key(f.read())
         f = open(f'{USER_KEYS_DIR}/{self.admin}/pub.key','r')
         self.adminPubKey = RSA.import_key(f.read())
-        # TODO: enable this again and start using config object in the code
-        # # Get encryption engine config
-        # timestamp, signature = self.getRequestMeta(self.admin, self.adminPrivKey)
-        # authData = { 'actor': self.admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
+        # Get encryption engine config
         response = requests.get('http://localhost:5000/encryption-engine/config') #, headers = authData)
         self.encryptionEngineConfig = loads(response.text)['data']
         self.encryptionEngine = EncryptionEngine(self.encryptionEngineConfig['blockSize'], self.encryptionEngineConfig['logPerformance'])
@@ -41,33 +38,32 @@ class Client:
 
     def getRequestMeta(self, username, key):
         timestamp = time.time()
-        # timestamp = time.time() - 50
         h = SHA256.new(bytes(f'{username};{timestamp}', 'utf-8'))
         signature = pkcs1_15.new(key).sign(h)
         return timestamp, signature
 
-    ## Add user
+    # Add user
     def addUser(self, username, permission):
         # Generate user keys
         key = RSA.generate(2048)
         publickey = key.publickey()
 
-        ## Prepare request meta data
+        # Prepare request meta data
         timestamp, signature = self.getRequestMeta(self.admin, self.adminPrivKey)
         authData = { 'actor': self.admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
         data = { 'username': username, 'permission': permission, 'key': base64.b64encode(publickey.export_key("PEM")).decode("ascii") }
         return requests.post('http://localhost:5000/users', json = data, headers = authData)
 
-    ## Delete user
+    # Delete user
     def deleteUser(self, userId):
-        ## Prepare request meta data
+        # Prepare request meta data
         timestamp, signature = self.getRequestMeta(self.admin, self.adminPrivKey)
         authData = { 'actor': self.admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
         return requests.delete(f'http://localhost:5000/users/{userId}', headers = authData)
     
     # revoke user access to a file
     def revokeUserAccess(self, userId, fileId):
-        ## Prepare request meta data
+        # Prepare request meta data
         timestamp, signature = self.getRequestMeta(self.admin, self.adminPrivKey)
         authData = { 'actor': self.admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
         return requests.delete(f'http://localhost:5000/files/{fileId}/access/{userId}', headers = authData)
@@ -223,7 +219,6 @@ class Client:
         workerNodes = self.getWorkerNodes()
         outputFile = open(fileId, 'wb')
         for chunkId in fileMeta['chunks'].keys():
-
             chunkTimes['chunkDownload'][chunkId] = {'start': time.time()}
             downloadSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             workerNodeId = fileMeta['chunks'][chunkId]['workerNodeIds'][0]
@@ -232,8 +227,8 @@ class Client:
             downloadSocket.send(dumps({'authRequest': {'fileId': fileId}, 'signature': opSignature, 'chunkId': chunkId}, ensure_ascii=False).encode('utf-8'))
             bytes_received = 0
             data = b''
-            while bytes_received < CHUNK_SIZE+32:
-                sentLen = min(CHUNK_SIZE+32 - bytes_received, 2048)
+            while bytes_received < CHUNK_SIZE+self.encryptionEngineConfig['blockSize']:
+                sentLen = min(CHUNK_SIZE+self.encryptionEngineConfig['blockSize'] - bytes_received, 2048)
                 data += downloadSocket.recv(sentLen)
                 bytes_received = bytes_received + sentLen
             # send feedback to server

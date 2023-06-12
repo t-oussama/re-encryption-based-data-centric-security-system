@@ -44,12 +44,6 @@ if msg == message:
 else:
     print('messages do not match')
 
-exit(0)
-# print('-----------------------------------------------')
-# c = enc.aes_enc(message, DATA_INPUT_SIZE, 'A'*32)
-# print('Encrypted (AES)')
-
-
 # Re-encryption
 start = time.time()
 newPrfKey1 = b'4'*enc.getBlockSize()

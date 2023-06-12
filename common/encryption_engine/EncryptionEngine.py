@@ -10,6 +10,8 @@ sys.path.append(f'{BASE_DIR}/../../aont_based_encryption')
 from Crypto.Hash import SHA256
 from AontBasedEncryption import AontBasedEncryption
 
+import hashlib
+
 class KeyPair:
     def __init__(self, secretKey: bytes, publicKey: bytes) -> None:
         self.secretKey: bytes = secretKey
