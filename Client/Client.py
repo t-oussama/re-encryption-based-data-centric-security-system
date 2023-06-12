@@ -253,8 +253,9 @@ class Client:
 
             chunkTimes['fileWrite'][chunkId] = {'start': time.time()}
             outputFile.write(plain)
-            chunkTimes['fileWrite'][chunkId]['end'] = time.time()
         outputFile.close()
+        # TODO: This is to check if some time is wasted on file close
+        chunkTimes['fileWrite'][chunkId]['end'] = time.time()
 
         # performance logs
         self.logger.logPerformance('download::total', downloadStartTime, time.time())
