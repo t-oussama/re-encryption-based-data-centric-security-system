@@ -26,12 +26,34 @@ def CalcDiff(logPath):
         res[operation] = [diff, diffPercentage]
     return res
 
+def CalcVariation(logPath):
+    df = LoadData(logPath)
+    # operations = list(set(df['Operation'].values)) # upload & download
+    chunkScopedActions = df.loc[df['Chunk'] != '']
+    groupedChunkScopedActions = chunkScopedActions.groupby(['Operation', 'Action'], as_index=False)
+    # maxValue = groupedChunkScopedActions['Execution Time'].max()
+    # minValue = groupedChunkScopedActions['Execution Time'].min()
+    # meanValue = groupedChunkScopedActions['Execution Time'].mean()
+    # medianValue = groupedChunkScopedActions['Execution Time'].median()
+
+    return groupedChunkScopedActions['Execution Time'].agg(['min', 'max', 'mean', 'median', 'var'])
+
 if __name__ == '__main__':
     fileSizes = ['5MB', '1GB']
     # blockSizes = ['32', '512', '1024', '2048', '4096', '8192']
     blockSizes = ['32', '1024', '2048', '4096', '8192']
     operations = ['upload', 'download']
     data = {}
+
+    for fileSize in fileSizes:
+        for blockSize in blockSizes:
+            fig, ax = plt.subplots()
+            res = CalcVariation(f'../../Client/logs/{blockSize}/performance_test_{fileSize}.log')
+            table = ax.table(cellText=res.values, colLabels=res.columns, loc='center')
+            table.set_fontsize(50)
+            table.scale(1,4)
+            ax.axis('off')
+            fig.savefig(f'./ValidateLogs/variance_{fileSize}_{blockSize}.png')
 
     fig, axes = plt.subplots(nrows=len(operations)*len(fileSizes), ncols=2)
     fig.set_size_inches(18.5, 20)
@@ -53,7 +75,7 @@ if __name__ == '__main__':
         for j, fileSize in enumerate(fileSizes):
             for k, suffix in enumerate(['_value', '_percentage']):
                 axes[i*2+j][k].barh(blockSizes, data[fileSize][f'{operation}{suffix}'])
-                axes[i*2+j][k].set_xlabel('fileSize_blockSize')
-                axes[i*2+j][k].set_ylabel(f'diff{suffix}')
+                axes[i*2+j][k].set_ylabel('fileSize_blockSize')
+                axes[i*2+j][k].set_xlabel(f'diff{suffix}')
                 axes[i*2+j][k].set_title(f'{operation}{suffix} ({fileSize})')
     fig.savefig('./ValidateLogs/fig.png')

@@ -1,1 +1,2 @@
 * [ ] Check why downloads have a mismatch between logged & summed execution times
+* [ ] Fix the way plt table is displayed in ValidateLogs.py
