@@ -1,9 +1,13 @@
 from Client import Client
 import os
-import time
+import sys
+
+logFileDir = ''
+if len(sys.argv) > 1:
+    logFileDir = sys.argv[1]
 
 def sequence(fileSize):
-    client = Client('user1', f'performance_test_{fileSize}')
+    client = Client('user1', f'{logFileDir}/performance_test_{fileSize}')
 
     # create new user
     newUserName = 'new_test_user'
@@ -41,11 +45,11 @@ def sequence(fileSize):
         print('[i] Decrypted files match !')
         print('[+] Scenario successful')
 
-    # print('[*] Cleaning up')
-    # os.system(f'rm ./{fileId}')
-    # os.system(f'rm -r ../WN/data/{fileId}')
+    print('[*] Cleaning up')
+    os.system(f'rm ./{fileId}')
+    os.system(f'rm -r ../WN/data/{fileId}')
     print('[+] DONE')
 
-fileSizes = ['5MB', '1GB'] #, '2GB', '3GB']
+fileSizes = ['512MB', '1GB'] #, '2GB', '3GB']
 for fileSize in fileSizes:
     sequence(fileSize)

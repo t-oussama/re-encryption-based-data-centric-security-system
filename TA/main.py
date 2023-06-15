@@ -10,8 +10,13 @@ from Crypto.Hash import SHA256
 from Crypto.Signature import pkcs1_15
 import copy
 import yaml
+import sys
 
-with open('config.yaml', 'r') as file:
+configFile = 'config.yaml'
+if len(sys.argv) > 1:
+    configFile = sys.argv[1]
+
+with open(configFile, 'r') as file:
     try:
         config = yaml.safe_load(file)
     except yaml.YAMLError as e:

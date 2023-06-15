@@ -11,9 +11,12 @@ def CalcDiff(logPath):
     chunkScopedActions = df.loc[df['Chunk'] != '']
 
     chunkScopedActionsTotals = chunkScopedActions.groupby(['Operation', 'Action'], as_index=False)['Execution Time'].sum()
+    globalActionsSummed = df.loc[(df['Action'] != 'total') & (df['Chunk'] == '')].groupby(['Operation'], as_index=False)['Execution Time'].sum()
     
     # check that the logged total matches the calculated total with a small margin of error
-    operationSummedTotals = chunkScopedActionsTotals.groupby(['Operation'], as_index=False).sum()
+    chunkActionsSummedTotals = chunkScopedActionsTotals.groupby(['Operation'], as_index=False).sum()
+    operationSummedTotals = pd.concat([chunkActionsSummedTotals, globalActionsSummed]).groupby(['Operation'], as_index=False).sum()
+    # operationSummedTotals = 
     operationLoggedTotals = df.loc[df['Action'] == 'total']
 
     res = {}
@@ -22,7 +25,6 @@ def CalcDiff(logPath):
         loggedTotal = operationLoggedTotals.loc[operationLoggedTotals['Operation'] == operation]['Execution Time'].values[0]
         diff = loggedTotal - summedTotal
         diffPercentage = (loggedTotal - summedTotal) / loggedTotal * 100
-        # print (f'{operation}', f'{diff:.2f} / {loggedTotal:.2f}', f'({diffPercentage:.2f}%)')
         res[operation] = [diff, diffPercentage]
     return res
 
@@ -31,29 +33,47 @@ def CalcVariation(logPath):
     # operations = list(set(df['Operation'].values)) # upload & download
     chunkScopedActions = df.loc[df['Chunk'] != '']
     groupedChunkScopedActions = chunkScopedActions.groupby(['Operation', 'Action'], as_index=False)
-    # maxValue = groupedChunkScopedActions['Execution Time'].max()
-    # minValue = groupedChunkScopedActions['Execution Time'].min()
-    # meanValue = groupedChunkScopedActions['Execution Time'].mean()
-    # medianValue = groupedChunkScopedActions['Execution Time'].median()
-
     return groupedChunkScopedActions['Execution Time'].agg(['min', 'max', 'mean', 'median', 'var'])
+
+
+def dfToTable(df, width=20, height=3):
+    rows = []
+    indexes = list(df.index)
+    for i, row in enumerate(df.values):
+        row = list(indexes[i]) + list(map(lambda e: f'{e:.6f}', row))
+        rows.append(row)
+
+    cols = ['Operation', 'Action'] + list(df.columns)
+
+    fig, ax = plt.subplots()
+    fig.set_size_inches(width, height)
+    ax.axis('tight')
+    ax.axis('off')
+    table = ax.table(cellText=rows, colLabels=cols, loc='center')
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    return fig
 
 if __name__ == '__main__':
     fileSizes = ['5MB', '1GB']
+    blockSizes = ['1024']
     # blockSizes = ['32', '512', '1024', '2048', '4096', '8192']
-    blockSizes = ['32', '1024', '2048', '4096', '8192']
+    # blockSizes = ['32', '1024', '2048', '4096', '8192']
     operations = ['upload', 'download']
     data = {}
 
+    dataFrames = []
     for fileSize in fileSizes:
         for blockSize in blockSizes:
-            fig, ax = plt.subplots()
             res = CalcVariation(f'../../Client/logs/{blockSize}/performance_test_{fileSize}.log')
-            table = ax.table(cellText=res.values, colLabels=res.columns, loc='center')
-            table.set_fontsize(50)
-            table.scale(1,4)
-            ax.axis('off')
+            newColName = f'{fileSize}_{blockSize}'
+            dataFrames.append(res.rename(columns={'var': newColName})[newColName])
+            fig = dfToTable(res)
             fig.savefig(f'./ValidateLogs/variance_{fileSize}_{blockSize}.png')
+    globalVariances = pd.concat(dataFrames, axis=1)
+
+    fig = dfToTable(globalVariances, 30, 3)
+    fig.savefig(f'./ValidateLogs/variances_all.png')
 
     fig, axes = plt.subplots(nrows=len(operations)*len(fileSizes), ncols=2)
     fig.set_size_inches(18.5, 20)
@@ -78,4 +98,4 @@ if __name__ == '__main__':
                 axes[i*2+j][k].set_ylabel('fileSize_blockSize')
                 axes[i*2+j][k].set_xlabel(f'diff{suffix}')
                 axes[i*2+j][k].set_title(f'{operation}{suffix} ({fileSize})')
-    fig.savefig('./ValidateLogs/fig.png')
+    fig.savefig('./ValidateLogs/summed-total-vs-real-total.png')

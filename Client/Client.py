@@ -63,10 +63,13 @@ class Client:
     
     # revoke user access to a file
     def revokeUserAccess(self, userId, fileId):
+        startTime = time.time()
         # Prepare request meta data
         timestamp, signature = self.getRequestMeta(self.admin, self.adminPrivKey)
         authData = { 'actor': self.admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
-        return requests.delete(f'http://localhost:5000/files/{fileId}/access/{userId}', headers = authData)
+        res = requests.delete(f'http://localhost:5000/files/{fileId}/access/{userId}', headers = authData)
+        self.logger.logPerformance('revoke_access::total', startTime, time.time())
+        return res
 
     def getWorkerNodes(self):
         timestamp, signature = self.getRequestMeta(self.admin, self.adminPrivKey)
@@ -216,7 +219,9 @@ class Client:
         fileMeta = responseObject['data']
         fetchFileMetaEndTime = time.time()
 
+        fetchWorkerNodesStartTime = time.time()
         workerNodes = self.getWorkerNodes()
+        fetchWorkerNodesEndTime = time.time()
         outputFile = open(fileId, 'wb')
         for chunkId in fileMeta['chunks'].keys():
             chunkTimes['chunkDownload'][chunkId] = {'start': time.time()}
@@ -253,14 +258,14 @@ class Client:
 
             chunkTimes['fileWrite'][chunkId] = {'start': time.time()}
             outputFile.write(plain)
+            chunkTimes['fileWrite'][chunkId]['end'] = time.time()
         outputFile.close()
         # TODO: This is to check if some time is wasted on file close
-        chunkTimes['fileWrite'][chunkId]['end'] = time.time()
 
         # performance logs
         self.logger.logPerformance('download::total', downloadStartTime, time.time())
-
         self.logger.logPerformance('download::fileMetaFetch', fetchFileMetaStartTime, fetchFileMetaEndTime)
+        self.logger.logPerformance('download::fetchWorkerNodes', fetchWorkerNodesStartTime, fetchWorkerNodesEndTime)
         for key in chunkTimes.keys():
             for chunkId in chunkTimes[key].keys():
                 self.logger.logPerformance(f'download::{key}::{chunkId}', chunkTimes[key][chunkId]['start'], chunkTimes[key][chunkId]['end'])
