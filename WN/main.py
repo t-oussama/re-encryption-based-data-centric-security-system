@@ -14,7 +14,9 @@ import socket
 import threading
 import yaml
 
-import hashlib
+import logging
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
 
 from common.encryption_engine.EncryptionEngine import EncryptionEngine
 

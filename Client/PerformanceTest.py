@@ -36,7 +36,7 @@ def sequence(fileSize):
     print('Access revoked')
 
     # compare file to source
-    diff = os.system(f'diff ./{fileId} {localFilePath}')
+    diff = os.system(f'diff ./data/{fileId} {localFilePath}')
 
     if diff:
         print('[i] Decrypted files do not match !')
@@ -46,10 +46,11 @@ def sequence(fileSize):
         print('[+] Scenario successful')
 
     print('[*] Cleaning up')
-    os.system(f'rm ./{fileId}')
+    os.system(f'rm ./data/{fileId}')
     os.system(f'rm -r ../WN/data/{fileId}')
     print('[+] DONE')
 
-fileSizes = ['512MB', '1GB'] #, '2GB', '3GB']
+fileSizes = ['5MB', '512MB', '1GB']#, '2GB', '3GB']
 for fileSize in fileSizes:
+    print(f'[i] File Size: {fileSize}\n\n')
     sequence(fileSize)

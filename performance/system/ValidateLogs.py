@@ -7,16 +7,15 @@ from LoadData import LoadData
 def CalcDiff(logPath):
 
     df = LoadData(logPath)
-    operations = list(set(df['Operation'].values)) # upload & download
     chunkScopedActions = df.loc[df['Chunk'] != '']
+    operations = list(set(chunkScopedActions['Operation'].values)) # upload & download
 
     chunkScopedActionsTotals = chunkScopedActions.groupby(['Operation', 'Action'], as_index=False)['Execution Time'].sum()
     globalActionsSummed = df.loc[(df['Action'] != 'total') & (df['Chunk'] == '')].groupby(['Operation'], as_index=False)['Execution Time'].sum()
     
     # check that the logged total matches the calculated total with a small margin of error
     chunkActionsSummedTotals = chunkScopedActionsTotals.groupby(['Operation'], as_index=False).sum()
-    operationSummedTotals = pd.concat([chunkActionsSummedTotals, globalActionsSummed]).groupby(['Operation'], as_index=False).sum()
-    # operationSummedTotals = 
+    operationSummedTotals = pd.concat([chunkActionsSummedTotals, globalActionsSummed]).groupby(['Operation'], as_index=False)['Execution Time'].sum()
     operationLoggedTotals = df.loc[df['Action'] == 'total']
 
     res = {}
@@ -40,12 +39,12 @@ def dfToTable(df, width=20, height=3):
     rows = []
     indexes = list(df.index)
     for i, row in enumerate(df.values):
-        row = list(indexes[i]) + list(map(lambda e: f'{e:.6f}', row))
+        row = list([indexes[i]]) + list(row[:2]) + list(map(lambda e: f'{e:.6f}', row[2:]))
         rows.append(row)
 
-    cols = ['Operation', 'Action'] + list(df.columns)
+    cols = ['index'] + list(df.columns)
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(constrained_layout = True)
     fig.set_size_inches(width, height)
     ax.axis('tight')
     ax.axis('off')
@@ -55,9 +54,9 @@ def dfToTable(df, width=20, height=3):
     return fig
 
 if __name__ == '__main__':
-    fileSizes = ['5MB', '1GB']
-    blockSizes = ['1024']
-    # blockSizes = ['32', '512', '1024', '2048', '4096', '8192']
+    fileSizes = ['5MB', '512MB', '1GB']
+    # blockSizes = ['1024']
+    blockSizes = ['32', '512', '1024', '2048']
     # blockSizes = ['32', '1024', '2048', '4096', '8192']
     operations = ['upload', 'download']
     data = {}
@@ -75,7 +74,7 @@ if __name__ == '__main__':
     fig = dfToTable(globalVariances, 30, 3)
     fig.savefig(f'./ValidateLogs/variances_all.png')
 
-    fig, axes = plt.subplots(nrows=len(operations)*len(fileSizes), ncols=2)
+    fig, axes = plt.subplots(nrows=len(operations)*len(fileSizes), ncols=2, constrained_layout = True)
     fig.set_size_inches(18.5, 20)
     for fileSize in fileSizes:
         data[fileSize] = {

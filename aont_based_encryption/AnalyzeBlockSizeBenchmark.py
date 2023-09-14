@@ -22,7 +22,7 @@ def visualize(data, figureName):
     metrics.remove('blockSize')
     metricsCount = len(metrics)
 
-    fig, axs = plt.subplots(metricsCount, figsize=(18,18))
+    fig, axs = plt.subplots(metricsCount, figsize=(18,18), constrained_layout = True)
     yPos = range(dataSize)
     cmap = plt.cm.tab10
     colors = cmap(np.arange(dataSize) % cmap.N)

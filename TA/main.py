@@ -12,6 +12,10 @@ import copy
 import yaml
 import sys
 
+import logging
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
+
 configFile = 'config.yaml'
 if len(sys.argv) > 1:
     configFile = sys.argv[1]

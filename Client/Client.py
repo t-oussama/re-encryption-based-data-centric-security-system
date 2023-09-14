@@ -222,7 +222,7 @@ class Client:
         fetchWorkerNodesStartTime = time.time()
         workerNodes = self.getWorkerNodes()
         fetchWorkerNodesEndTime = time.time()
-        outputFile = open(fileId, 'wb')
+        outputFile = open(f'./data/{fileId}', 'wb')
         for chunkId in fileMeta['chunks'].keys():
             chunkTimes['chunkDownload'][chunkId] = {'start': time.time()}
             downloadSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
