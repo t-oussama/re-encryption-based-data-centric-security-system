@@ -1,8 +1,11 @@
 # Validates if the logged values seem consistent
+# This only verifies the consistency accross chunks
+# with the same operation, file size and chunk size
 
 import pandas as pd
 import matplotlib.pyplot as plt
 from LoadData import LoadData
+from FileSizes import FILE_SIZES
 
 def CalcDiff(logPath):
 
@@ -37,12 +40,11 @@ def CalcVariation(logPath):
 
 def dfToTable(df, width=20, height=3):
     rows = []
-    indexes = list(df.index)
     for i, row in enumerate(df.values):
-        row = list([indexes[i]]) + list(row[:2]) + list(map(lambda e: f'{e:.6f}', row[2:]))
+        row = list(row[:2]) + list(map(lambda e: f'{e:.6f}', row[2:]))
         rows.append(row)
 
-    cols = ['index'] + list(df.columns)
+    cols = list(df.columns)
 
     fig, ax = plt.subplots(constrained_layout = True)
     fig.set_size_inches(width, height)
@@ -54,9 +56,9 @@ def dfToTable(df, width=20, height=3):
     return fig
 
 if __name__ == '__main__':
-    fileSizes = ['5MB', '512MB', '1GB']
+    fileSizes = FILE_SIZES
     # blockSizes = ['1024']
-    blockSizes = ['32', '512', '1024', '2048']
+    blockSizes = ['32', '512', '1024']
     # blockSizes = ['32', '1024', '2048', '4096', '8192']
     operations = ['upload', 'download']
     data = {}
@@ -65,12 +67,15 @@ if __name__ == '__main__':
     for fileSize in fileSizes:
         for blockSize in blockSizes:
             res = CalcVariation(f'../../Client/logs/{blockSize}/performance_test_{fileSize}.log')
+            if not len(dataFrames):
+                dataFrames.append(res[['Operation', 'Action']])
             newColName = f'{fileSize}_{blockSize}'
             dataFrames.append(res.rename(columns={'var': newColName})[newColName])
             fig = dfToTable(res)
             fig.savefig(f'./ValidateLogs/variance_{fileSize}_{blockSize}.png')
     globalVariances = pd.concat(dataFrames, axis=1)
 
+    globalVariances['max_variance'] = globalVariances.iloc[:, 2:].max(axis=1)
     fig = dfToTable(globalVariances, 30, 3)
     fig.savefig(f'./ValidateLogs/variances_all.png')
 

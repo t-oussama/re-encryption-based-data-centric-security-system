@@ -1,8 +1,9 @@
-from AnalyzeLog import AnalyzeLog
+from performance.system.BasicAnalytics import AnalyzeLog
+from FileSizes import FILE_SIZES
 
-fileSizes = ['5MB', '1GB']
-# blockSizes = ['32', '512', '1024', '2048', '4096', '8192']
-blockSizes = ['32', '1024', '2048', '4096', '8192']
+fileSizes = FILE_SIZES
+blockSizes = ['32', '512', '1024']
+# blockSizes = ['32', '1024', '2048', '4096', '8192']
 
 for blockSize in blockSizes:
     for fileSize in fileSizes:

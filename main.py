@@ -19,8 +19,11 @@ USER_KEYS_DIR = './user_keys'
 admin = 'user1'
 f = open(f'{USER_KEYS_DIR}/{admin}/priv.key','r')
 adminPrivKey = RSA.import_key(f.read())
+f.close()
+
 f = open(f'{USER_KEYS_DIR}/{admin}/pub.key','r')
 adminPubKey = RSA.import_key(f.read())
+f.close()
 
 ## Prepare request meta data
 timestamp, signature = getRequestMeta(admin, adminPrivKey)

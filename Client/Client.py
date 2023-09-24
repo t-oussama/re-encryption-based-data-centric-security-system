@@ -28,8 +28,10 @@ class Client:
         # Load admin keys
         f = open(f'{USER_KEYS_DIR}/{self.admin}/priv.key','r')
         self.adminPrivKey = RSA.import_key(f.read())
+        f.close()
         f = open(f'{USER_KEYS_DIR}/{self.admin}/pub.key','r')
         self.adminPubKey = RSA.import_key(f.read())
+        f.close()
         # Get encryption engine config
         response = requests.get('http://localhost:5000/encryption-engine/config') #, headers = authData)
         self.encryptionEngineConfig = loads(response.text)['data']

@@ -1,6 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from LoadData import LoadData
+from FileSizes import FILE_SIZES
 
 def dfToTable(df, width=20, height=3):
     rows = []
@@ -39,9 +40,9 @@ def AnalyzeEffectOfBlockSize(dataFrames, fileSize):
 
 
 if __name__ == '__main__':
-    fileSizes = ['5MB', '512MB', '1GB']
+    fileSizes = FILE_SIZES
     # blockSizes = ['32', '512', '1024', '2048', '4096', '8192']
-    blockSizes = ['32', '512', '1024', '2048']
+    blockSizes = ['32', '512', '1024']
 
     for fileSize in fileSizes:
         dataFrames = {}

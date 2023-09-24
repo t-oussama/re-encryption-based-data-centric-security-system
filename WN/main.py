@@ -79,6 +79,7 @@ def handleChunkWrite(conn):
         file.write(data)
         bytes_recd = bytes_recd + len(data)
     conn.send(b'1')
+    file.close()
 
 def handleChunkFetch(conn):
     metaBytes = conn.recv(1024)
@@ -106,6 +107,7 @@ def handleChunkFetch(conn):
         conn.send(data)
         bytes_sent = bytes_sent + sentLen
     conn.recv(1)
+    file.close()
     # Inform TA that read is over
 
 
@@ -118,7 +120,6 @@ def chunkUploadListener():
         uploadSocket.listen()
         while True:
             conn, addr = uploadSocket.accept()
-            print('connection created: ', addr)
             thread = threading.Thread(target=handleChunkWrite, args=(conn,))
             uploadThreads.append(thread)
             thread.start()
@@ -135,7 +136,6 @@ def chunkFetchListener():
         downloadSocket.listen()
         while True:
             conn, addr = downloadSocket.accept()
-            print('connection created: ', addr)
             thread = threading.Thread(target=handleChunkFetch, args=(conn,))
             uploadThreads.append(thread)
             thread.start()

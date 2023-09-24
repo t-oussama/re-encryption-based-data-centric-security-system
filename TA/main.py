@@ -218,8 +218,8 @@ def setState():
         chunkId = request.json['chunkId']
         state = request.json['state']
         reEncrypted = ta.updateChunkState(fileId, chunkId, state)
-        if reEncrypted:
-            print('[+] Chunk reEncrypted')
+        # if reEncrypted:
+        #     print('[+] Chunk reEncrypted')
     except Exception as e:
         print(e)
         return {'error': str(e)}, 400

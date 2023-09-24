@@ -12,6 +12,7 @@ from .User import User
 import os
 import time
 import uuid
+import sys
 from datetime import datetime
 from common import constants
 from common.encryption_engine.EncryptionEngine import EncryptionEngine
@@ -29,8 +30,11 @@ class TrustedAuthority:
         # Load keys
         f = open(f'{TA_KEYS_DIR}/priv.key','r')
         self.privKey = RSA.import_key(f.read())
+        f.close()
+
         f = open(f'{TA_KEYS_DIR}/pub.key','r')
         self.pubKey = RSA.import_key(f.read())
+        f.close()
 
         # Load users
         f = open(USERS_PERMISSIONS_FILE)
@@ -79,7 +83,6 @@ class TrustedAuthority:
         h = SHA256.new(bytes(f'{actor};{timestamp}', 'utf-8'))
         try:
             pkcs1_15.new(self.users[actor].pubKey).verify(h, signature)
-            print('[+] The signature is valid.')
         except (ValueError, TypeError):
            raise Exception(f'Invalid user signature for {actor}')
 
@@ -141,7 +144,6 @@ class TrustedAuthority:
         uniqueUsers = list(set(readOnlyUsers + readWriteUsers))
         for userId in uniqueUsers:
             self.users[userId].files.append(fileId)
-
         return {
             'fileId': fileId,
             'chunks': toDict(chunks, lambda chunk: chunk.toDict())

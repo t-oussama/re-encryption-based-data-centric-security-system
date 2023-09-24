@@ -321,7 +321,6 @@ class AontBasedEncryption {
                 memcpy(cipher+(i+1)*this->blockSize, x, this->blockSize);
                 delete[] x;
             }
-            cout << endl;
             t2 = high_resolution_clock::now();
             if (this->logPerformance) {
                 cout << "Generating final cihper took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
