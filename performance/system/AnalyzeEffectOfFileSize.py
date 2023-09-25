@@ -85,6 +85,24 @@ def AnalyzeEffectOfFileSize(dataFrames):
     plt.savefig(f'./EffectOfFileSize/totals.png')
     plt.clf()
 
+    operations = []
+    for index, row in totals.iterrows():
+        # skip revoke access
+        if row["Operation"] == 'revoke_access':
+            continue
+
+        operations.append(row['Operation'])
+        # get the max & min from the row
+        rowMax = row[execTimeColumns].max()
+        rowMin = row[execTimeColumns].min()
+
+        normalizedRow = (row[execTimeColumns] - rowMin) / (rowMax - rowMin)
+        normalizedExecutionTimes = list(map(lambda fileSize: normalizedRow[f'{fileSize}_exec_time'], fileSizes))
+        plt.plot(fileSizes, normalizedExecutionTimes, 'o-', label=f'{row["Operation"]}-{row["Action"]}')
+    plt.legend(operations)
+    plt.savefig(f'./EffectOfFileSize/totals-normalized.png')
+    plt.clf()
+
 if __name__ == '__main__':
     fileSizes = FILE_SIZES
     blockSize = '512'

@@ -58,6 +58,7 @@ def dfToTable(df, width=20, height=3):
 if __name__ == '__main__':
     fileSizes = FILE_SIZES
     # blockSizes = ['1024']
+    # blockSizes = ['512']
     blockSizes = ['32', '512', '1024']
     # blockSizes = ['32', '1024', '2048', '4096', '8192']
     operations = ['upload', 'download']

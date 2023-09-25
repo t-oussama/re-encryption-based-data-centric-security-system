@@ -239,7 +239,7 @@ class AontBasedEncryption {
                 memcpy(x + i*tmpUnitSize, &i, tmpUnitSize);
             }
 
-            // TODO: counter probably shouldn't be a constant
+            // TODO: use randome counter
             unsigned char counter[PRF_CTR_LEN] = {0};
             // TODO: check if this can be further improved and if using aes ctr
             // causes any security risk
