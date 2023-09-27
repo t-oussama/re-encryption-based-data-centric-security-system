@@ -9,8 +9,8 @@ trusted_authority:
       read: true
       write: true
     scheduling:
-      lazy: false
-      lastAccessTimeOffset: 300 # In seconds
+      lazy: true
+      lastAccessTimeOffset: 0 # In seconds
   encryption_engine:
     blockSize: $BLOCK_SIZE
     logPerformance: false

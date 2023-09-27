@@ -8,6 +8,7 @@ class ChunkMeta:
         self.workerNodeIds = workerNodeIds
         self.id = chunkId
         self.lastAccessTime = datetime.now()
+        self.dirty = False
 
     def toDict(self):
         return {
@@ -16,5 +17,6 @@ class ChunkMeta:
             'size': self.size,
             'workerNodeIds': self.workerNodeIds,
             'id': self.id,
+            'dirty': self.dirty,
             'lastAccessTime': self.lastAccessTime.strftime("%m/%d/%Y, %H:%M:%S"),
         }

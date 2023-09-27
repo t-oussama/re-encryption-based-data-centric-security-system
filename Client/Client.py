@@ -204,6 +204,17 @@ class Client:
 
 
     def downloadFile(self, fileId):
+        # wait until file is clean
+        waitFileCleanStartTime = time.time()
+        isClean = False
+        while not isClean:
+            timestamp, signature = self.getRequestMeta(self.admin, self.adminPrivKey)
+            authData = { 'actor': self.admin, 'timestamp': str(timestamp), 'signature': base64.b64encode(signature).decode("ascii") }
+            response = requests.get(f'http://localhost:5000/files/{fileId}/clean', headers = authData)
+            responseObject = response.json()
+            isClean = responseObject['data']['clean']
+        waitFileCleanEndTime = time.time()
+
         downloadStartTime = time.time()
         chunkTimes = {
             'chunkDownload': {},
@@ -265,6 +276,7 @@ class Client:
         # TODO: This is to check if some time is wasted on file close
 
         # performance logs
+        self.logger.logPerformance('download::waitFileClean', waitFileCleanStartTime, waitFileCleanEndTime)
         self.logger.logPerformance('download::total', downloadStartTime, time.time())
         self.logger.logPerformance('download::fileMetaFetch', fetchFileMetaStartTime, fetchFileMetaEndTime)
         self.logger.logPerformance('download::fetchWorkerNodes', fetchWorkerNodesStartTime, fetchWorkerNodesEndTime)

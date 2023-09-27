@@ -227,3 +227,7 @@ class TrustedAuthority:
             userKeyFile.close()
 
         usersPermissionsFile.close()
+
+    # TODO: use this to make sure that TA is only stopped after terminate was executed to stop everything properly
+    def terminate(self):
+        self.scheduler.terminate()

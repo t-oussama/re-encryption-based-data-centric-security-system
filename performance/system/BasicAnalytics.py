@@ -18,7 +18,7 @@ def AnalyzeLog(logPath, figSuffix = None):
     fig.set_size_inches(18.5, 10.5)
     for i, operation in enumerate(operations):
         operationDf = chunkScopedActionsTotals.loc[chunkScopedActionsTotals['Operation'] == operation]
-        operationDf.set_index('Action').plot(y='Execution Time', kind='pie', ax=axes[i, 0], title = f'Total ({operation})')
+        # operationDf.set_index('Action').plot(y='Execution Time', kind='pie', ax=axes[i, 0], title = f'Total ({operation})')
 
         operationDf.plot(x='Action', y='Execution Time', kind='barh', ax=axes[i, 1], title = f'Total ({operation})')
 
@@ -31,7 +31,8 @@ def AnalyzeLog(logPath, figSuffix = None):
 if __name__ == '__main__':
     fileSizes = FILE_SIZES
     # blockSizes = ['32', '512', '1024', '2048', '4096', '8192']
-    blockSizes = ['32', '512', '1024']
+    # blockSizes = ['32', '512', '1024']
+    blockSizes = ['512']
 
     for blockSize in blockSizes:
         for fileSize in fileSizes:

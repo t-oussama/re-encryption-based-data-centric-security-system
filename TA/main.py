@@ -180,6 +180,26 @@ def getFiles():
 
     return jsonify({ 'data': filesMeta })
 
+@app.route('/files/<fileId>/clean', methods=['GET'])
+def isFileClean(fileId):
+    if not auth(request, 'R'):
+        return {'error': 'User is not authorized'}, 403
+
+    try:
+        data = ta.getFile(fileId)
+        usersWithAccess = data.permissions['r'] + data.permissions['w']
+        if not request.user in usersWithAccess:
+            return {'error': 'You do not have permission to read this file'}, 403
+    except Exception as e:
+        print(e)
+        return {'error': str(e)}, 400
+
+    # check if all chunks are clean
+    for chunkId in data.chunks.keys():
+        if data.chunks[chunkId].dirty:
+            return jsonify({'data': {'clean': False}})
+    return jsonify({'data': {'clean': True}})
+
 @app.route('/files/<fileId>', methods=['GET'])
 def getFile(fileId):
     if not auth(request, 'R'):

@@ -40,14 +40,14 @@ def sequence(fileSize):
     print('Access revoked')
 
     # compare file to source
-    # diff = os.system(f'diff ./data/{fileId} {localFilePath}')
+    diff = os.system(f'diff ./data/{fileId} {localFilePath}')
 
-    # if diff:
-    #     print('[i] Decrypted files do not match !')
-    #     print('[!] Scenario failed')
-    # else:
-    #     print('[i] Decrypted files match !')
-    #     print('[+] Scenario successful')
+    if diff:
+        print('[i] Decrypted files do not match !')
+        print('[!] Scenario failed')
+    else:
+        print('[i] Decrypted files match !')
+        print('[+] Scenario successful')
 
     print('[*] Cleaning up')
     os.system(f'rm ./data/{fileId}')

@@ -188,31 +188,31 @@ class AontBasedEncryption {
             *dst = (*dst & ~(1UL << dstPos)) | (((*src >> srcPos) & 1U) << dstPos);
         }
 
-        void quickSort(unsigned int* key, unsigned char** tmp, const int start , const int end, size_t tmpUnitSize) {
-            if(start >= end -1) {
-                return;
-            }
+        // void quickSort(unsigned int* key, unsigned char** tmp, const int start , const int end, size_t tmpUnitSize) {
+        //     if(start >= end -1) {
+        //         return;
+        //     }
 
-            unsigned int q = partition(key, tmp, start, end, tmpUnitSize);
-            quickSort(key, tmp, start, q, tmpUnitSize);
-            quickSort(key, tmp, q+1, end, tmpUnitSize);
-        }
+        //     unsigned int q = partition(key, tmp, start, end, tmpUnitSize);
+        //     quickSort(key, tmp, start, q, tmpUnitSize);
+        //     quickSort(key, tmp, q+1, end, tmpUnitSize);
+        // }
 
-        unsigned int partition(unsigned int* key, unsigned char** tmp, const int start , const int end, size_t tmpUnitSize) {
-            unsigned char* pivot = tmp[end-1];
-            unsigned int i = start;
-            for (unsigned int j = start; j < end - 1; j++) {
-                if (memcmp(tmp[j], pivot, tmpUnitSize) <= 0) {
-                    swap(tmp+i, tmp+j);
-                    swap(key+i, key+j);
-                    i++;
-                }
-            }
+        // unsigned int partition(unsigned int* key, unsigned char** tmp, const int start , const int end, size_t tmpUnitSize) {
+        //     unsigned char* pivot = tmp[end-1];
+        //     unsigned int i = start;
+        //     for (unsigned int j = start; j < end - 1; j++) {
+        //         if (memcmp(tmp[j], pivot, tmpUnitSize) <= 0) {
+        //             swap(tmp+i, tmp+j);
+        //             swap(key+i, key+j);
+        //             i++;
+        //         }
+        //     }
 
-            swap(tmp+i, tmp+end-1);
-            swap(key+i, key+end-1);
-            return i;
-        }
+        //     swap(tmp+i, tmp+end-1);
+        //     swap(key+i, key+end-1);
+        //     return i;
+        // }
 
         template <typename T> void swap(T* a, T* b) {
             T tmp = *a;
@@ -228,7 +228,6 @@ class AontBasedEncryption {
 
         unsigned int* GeneratePermutationKey(unsigned char* prfKey, const unsigned int permutationKeyLen) {
             unsigned int* permutationKey = new unsigned int[permutationKeyLen];
-            unsigned char** tmp = new unsigned char*[permutationKeyLen];
 
             size_t tmpUnitSize = sizeof(unsigned int);
             unsigned char* x = new unsigned char[tmpUnitSize*permutationKeyLen]{0};
@@ -245,28 +244,37 @@ class AontBasedEncryption {
             // causes any security risk
             unsigned char* fullTmp = new unsigned char[tmpUnitSize*permutationKeyLen];
             AesCtrEncrypt(x , tmpUnitSize*permutationKeyLen, fullTmp, prfKey, counter);
-            for (unsigned int i = 0; i < permutationKeyLen; i++) {
-                tmp[i] = fullTmp + i*tmpUnitSize;
-            }
-
-            delete[] x;
             auto t2 = high_resolution_clock::now();
             if (this->logPerformance) {
                 cout << "       PRF took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
             }
 
             t1 = high_resolution_clock::now();
-            quickSort(permutationKey, tmp, 0, permutationKeyLen, tmpUnitSize);
+            // unsigned char** tmp = new unsigned char*[permutationKeyLen];
+            for (unsigned int i = 0; i < permutationKeyLen; i++) {
+                unsigned int swapIndex = int((fullTmp[i*tmpUnitSize]) << 24 |
+                    (fullTmp[i*tmpUnitSize + 1]) << 16 |
+                    (fullTmp[i*tmpUnitSize + 2]) << 8 |
+                    (fullTmp[i*tmpUnitSize + 3]));
+                swap(permutationKey+i, permutationKey+(swapIndex % permutationKeyLen));
+            }
             t2 = high_resolution_clock::now();
             if (this->logPerformance) {
-                cout << "       Sorting took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+                cout << "       Swapping took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
             }
+            delete[] fullTmp;
+            delete[] x;
+
+            // t1 = high_resolution_clock::now();
+            // quickSort(permutationKey, tmp, 0, permutationKeyLen, tmpUnitSize);
+            // t2 = high_resolution_clock::now();
+            // if (this->logPerformance) {
+            //     cout << "       Sorting took: " << duration_cast<milliseconds>(t2 - t1).count() << endl;
+            // }
             // clean up
             // for (unsigned int i = 0; i < permutationKeyLen; i++) {
             //     delete[] tmp[i];
             // }
-            delete[] fullTmp;
-            delete[] tmp;
 
             return permutationKey;
         }
@@ -299,7 +307,7 @@ class AontBasedEncryption {
             delete[] m1;
             
             unsigned char* iv = new unsigned char [this->blockSize];
-            memcpy(iv, ctr, this->blockSize); // TODO_L: should IV really be the same as ctr ?
+            memcpy(iv, ctr, this->blockSize);
             auto encryptedIv = BitPermutationEncryption(iv, permKey2, this->blockSize);
             for(unsigned int i = 0; i < this->blockSize; i++) {
                 encryptedToken[i] = encryptedToken[i] ^ encryptedIv[i];
