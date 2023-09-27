@@ -86,7 +86,7 @@ class TrustedAuthority:
         except (ValueError, TypeError):
            raise Exception(f'Invalid user signature for {actor}')
 
-        if currentTimestamp - timestamp > 30:
+        if currentTimestamp - timestamp > 300:
             raise Exception('Timestamp too old')
 
         ## Authorisation
